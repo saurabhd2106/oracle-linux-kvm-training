@@ -20,12 +20,12 @@ output "public_subnet_id" {
 
 output "ssh_private_key_path" {
   description = "Local path to the generated SSH private key."
-  value       = var.ssh_private_key_path
+  value       = local.ssh_private_key_path
 }
 
 output "ssh_command" {
   description = "SSH command for connecting to the VM as the default Oracle Linux user."
-  value       = "ssh -i ${var.ssh_private_key_path} opc@${oci_core_instance.linux.public_ip}"
+  value       = "ssh -i ${local.ssh_private_key_path} opc@${oci_core_instance.linux.public_ip}"
 }
 
 # The in-guest device name (for example /dev/sdb) is assigned by the guest OS at

@@ -1,8 +1,8 @@
 resource "oci_core_vcn" "main" {
   compartment_id = var.compartment_ocid
   cidr_block     = var.vcn_cidr_block
-  display_name   = "${var.project_name}-vcn"
-  dns_label      = replace(var.project_name, "-", "")
+  display_name   = "${local.name_base}-vcn"
+  dns_label      = substr(replace(local.name_base, "-", ""), 0, 15)
 
   defined_tags  = var.defined_tags
   freeform_tags = var.freeform_tags
@@ -11,7 +11,7 @@ resource "oci_core_vcn" "main" {
 resource "oci_core_internet_gateway" "main" {
   compartment_id = var.compartment_ocid
   vcn_id         = oci_core_vcn.main.id
-  display_name   = "${var.project_name}-igw"
+  display_name   = "${local.name_base}-igw"
   enabled        = true
 
   defined_tags  = var.defined_tags
@@ -21,7 +21,7 @@ resource "oci_core_internet_gateway" "main" {
 resource "oci_core_route_table" "public" {
   compartment_id = var.compartment_ocid
   vcn_id         = oci_core_vcn.main.id
-  display_name   = "${var.project_name}-public-rt"
+  display_name   = "${local.name_base}-public-rt"
 
   route_rules {
     description       = "Default route to the internet gateway"
@@ -37,7 +37,7 @@ resource "oci_core_route_table" "public" {
 resource "oci_core_security_list" "public" {
   compartment_id = var.compartment_ocid
   vcn_id         = oci_core_vcn.main.id
-  display_name   = "${var.project_name}-public-sl"
+  display_name   = "${local.name_base}-public-sl"
 
   ingress_security_rules {
     description = "Allow SSH from the configured CIDR range"
@@ -66,7 +66,7 @@ resource "oci_core_subnet" "public" {
   compartment_id             = var.compartment_ocid
   vcn_id                     = oci_core_vcn.main.id
   cidr_block                 = var.public_subnet_cidr_block
-  display_name               = "${var.project_name}-public-subnet"
+  display_name               = "${local.name_base}-public-subnet"
   dns_label                  = "public"
   prohibit_public_ip_on_vnic = false
   route_table_id             = oci_core_route_table.public.id

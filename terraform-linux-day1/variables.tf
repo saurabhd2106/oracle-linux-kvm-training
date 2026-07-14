@@ -19,7 +19,7 @@ variable "private_key_path" {
 }
 
 variable "region" {
-  description = "OCI region identifier, for example ap-mumbai-1."
+  description = "OCI region identifier, for example ap-sydney-1."
   type        = string
 }
 
@@ -34,6 +34,16 @@ variable "availability_domain" {
   default     = null
 }
 
+variable "name_prefix" {
+  description = "Personal prefix that makes every resource name unique so multiple people can run this code in the same tenancy, for example sau (yields sau-linux-day1-vm)."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9]{1,5}$", var.name_prefix))
+    error_message = "name_prefix must be 2-6 characters, start with a lowercase letter, and contain only lowercase letters and numbers."
+  }
+}
+
 variable "project_name" {
   description = "Short name used to label OCI resources."
   type        = string
@@ -46,18 +56,18 @@ variable "project_name" {
 }
 
 variable "instance_display_name" {
-  description = "Display name for the Oracle Linux VM."
+  description = "Optional override for the VM display name. When null, it is derived as <name_prefix>-<project_name>-vm."
   type        = string
-  default     = "linux-day1-vm"
+  default     = null
 }
 
 variable "hostname_label" {
-  description = "DNS hostname label for the VM primary VNIC."
+  description = "Optional override for the VM DNS hostname label. When null, it is derived from name_prefix and project_name."
   type        = string
-  default     = "linuxday1"
+  default     = null
 
   validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{1,14}$", var.hostname_label))
+    condition     = var.hostname_label == null || can(regex("^[a-z][a-z0-9-]{1,14}$", var.hostname_label))
     error_message = "hostname_label must be 2-15 characters, start with a lowercase letter, and contain only lowercase letters, numbers, and hyphens."
   }
 }
@@ -132,9 +142,9 @@ variable "ssh_allowed_cidr" {
 }
 
 variable "ssh_private_key_path" {
-  description = "Local path where Terraform writes the generated VM SSH private key."
+  description = "Optional override for the local path where Terraform writes the generated VM SSH private key. When null, it is derived as ./generated/<name_prefix>-<project_name>."
   type        = string
-  default     = "./generated/linux-day1"
+  default     = null
 }
 
 variable "freeform_tags" {

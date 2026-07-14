@@ -50,9 +50,24 @@ tenancy_ocid     = "ocid1.tenancy.oc1..exampleuniqueid"
 user_ocid        = "ocid1.user.oc1..exampleuniqueid"
 fingerprint      = "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"
 private_key_path = "~/.oci/oci_api_key.pem"
-region           = "ap-mumbai-1"
+region           = "ap-sydney-1"
 compartment_ocid = "ocid1.compartment.oc1..exampleuniqueid"
+name_prefix      = "sau"
 ```
+
+### Unique names for shared tenancies
+
+Set a unique `name_prefix` (2-6 lowercase alphanumeric characters, for example `sau`) so multiple people can run this same code in the same OCI tenancy without name clashes. Every resource name is derived from it:
+
+| Resource | Example name (`name_prefix = "sau"`) |
+|---|---|
+| VM display name | `sau-linux-day1-vm` |
+| VM hostname label | `saulinuxday1` |
+| VCN / subnet / gateway / etc. | `sau-linux-day1-vcn`, `sau-linux-day1-public-subnet`, ... |
+| Data block volume | `sau-linux-day1-data-volume` |
+| SSH private key path | `./generated/sau-linux-day1` |
+
+You can still override `instance_display_name`, `hostname_label`, or `ssh_private_key_path` explicitly, but leaving them unset keeps names unique per person automatically.
 
 The default compute settings already match the requested VM:
 
@@ -88,10 +103,10 @@ Create the resources:
 terraform apply
 ```
 
-Terraform writes the generated VM private key to the path from `ssh_private_key_path`, which defaults to:
+Terraform writes the generated VM private key to the path from `ssh_private_key_path`, which defaults to `./generated/<name_prefix>-<project_name>`, for example:
 
 ```text
-./generated/linux-day1
+./generated/sau-linux-day1
 ```
 
 The file is created with `0600` permissions and is ignored by Git.
@@ -107,7 +122,7 @@ terraform output ssh_command
 Or connect manually:
 
 ```sh
-ssh -i ./generated/linux-day1 opc@<public-ip>
+ssh -i ./generated/sau-linux-day1 opc@<public-ip>
 ```
 
 ## Clean Up
