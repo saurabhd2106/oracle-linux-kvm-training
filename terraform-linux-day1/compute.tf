@@ -52,4 +52,12 @@ resource "oci_core_instance" "linux" {
   preserve_boot_volume = false
   defined_tags         = var.defined_tags
   freeform_tags        = var.freeform_tags
+
+  # The image data source is filtered by shape, so changing the shape returns a
+  # newer "latest" image. OCI rejects reimaging the boot volume in the same
+  # request that revises the instance shape, so ignore image drift on an
+  # already-provisioned instance and only apply the shape/OCPU/memory changes.
+  lifecycle {
+    ignore_changes = [source_details]
+  }
 }

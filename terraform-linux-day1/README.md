@@ -2,7 +2,7 @@
 
 This Terraform code provisions an Oracle Linux virtual machine on Oracle Cloud Infrastructure (OCI) with:
 
-- Shape: `VM.Standard.E4.Flex`
+- Shape: `VM.Standard.E5.Flex`
 - OCPUs: `4`
 - Memory: `16 GB`
 - Public subnet with internet gateway
@@ -57,7 +57,7 @@ compartment_ocid = "ocid1.compartment.oc1..exampleuniqueid"
 The default compute settings already match the requested VM:
 
 ```hcl
-instance_shape         = "VM.Standard.E4.Flex"
+instance_shape         = "VM.Standard.E5.Flex"
 instance_ocpus         = 4
 instance_memory_in_gbs = 16
 ```

@@ -11,8 +11,8 @@ project_name          = "linux-day1"
 instance_display_name = "linux-day1-vm"
 hostname_label        = "linuxday1"
 
-# VM.Standard.E4.Flex with 4 OCPUs and 16 GB memory.
-instance_shape         = "VM.Standard.E4.Flex"
+# VM.Standard.E5.Flex with 4 OCPUs and 16 GB memory.
+instance_shape         = "VM.Standard.E5.Flex"
 instance_ocpus         = 4
 instance_memory_in_gbs = 16
 

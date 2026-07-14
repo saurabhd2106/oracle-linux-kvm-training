@@ -63,15 +63,15 @@ variable "hostname_label" {
 }
 
 variable "instance_shape" {
-  description = "OCI compute shape for the VM. Always Free options: VM.Standard.E2.1.Micro (fixed, AMD) or VM.Standard.A1.Flex (Ampere ARM, up to 4 OCPU / 24 GB free)."
+  description = "OCI compute shape for the VM. Lab default is VM.Standard.E5.Flex (x86, 4 OCPU / 16 GB). Always Free options: VM.Standard.E2.1.Micro (fixed, AMD) or VM.Standard.A1.Flex (Ampere ARM, up to 4 OCPU / 24 GB free)."
   type        = string
-  default     = "VM.Standard.E2.1.Micro"
+  default     = "VM.Standard.E5.Flex"
 }
 
 variable "instance_ocpus" {
   description = "Number of OCPUs for flex shapes only (ignored for fixed shapes like VM.Standard.E2.1.Micro)."
   type        = number
-  default     = 1
+  default     = 4
 
   validation {
     condition     = var.instance_ocpus > 0
@@ -82,7 +82,7 @@ variable "instance_ocpus" {
 variable "instance_memory_in_gbs" {
   description = "Amount of memory in GB for flex shapes only (ignored for fixed shapes like VM.Standard.E2.1.Micro)."
   type        = number
-  default     = 6
+  default     = 16
 
   validation {
     condition     = var.instance_memory_in_gbs > 0
@@ -99,6 +99,12 @@ variable "boot_volume_size_in_gbs" {
     condition     = var.boot_volume_size_in_gbs >= 50
     error_message = "boot_volume_size_in_gbs must be at least 50 GB."
   }
+}
+
+variable "data_volume_size_in_gbs" {
+  description = "Size in GB of the secondary block volume attached for the storage lab"
+  type        = number
+  default     = 50
 }
 
 variable "oracle_linux_version" {
