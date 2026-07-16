@@ -1,0 +1,5 @@
+---
+- name: Restart sshd
+  ansible.builtin.systemd:
+    name: "{{ virt_manager_sshd_service }}"
+    state: restarted

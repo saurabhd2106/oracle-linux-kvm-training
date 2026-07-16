@@ -1,0 +1,10 @@
+---
+# Packages for the virt-manager GUI plus the X11 forwarding prerequisites so the
+# app can be launched from the workstation over `ssh -X` on the headless VM.
+virt_manager_packages:
+  - virt-manager
+  - xorg-x11-xauth        # provides `xauth`, required for SSH X11 forwarding
+  - dejavu-sans-fonts     # baseline fonts so the GUI renders correctly
+
+virt_manager_sshd_config: /etc/ssh/sshd_config
+virt_manager_sshd_service: sshd

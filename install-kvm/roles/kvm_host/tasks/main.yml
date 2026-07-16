@@ -1,0 +1,30 @@
+---
+- name: "Step 01 - Verify CPU virtualization and nested-virt support"
+  ansible.builtin.import_tasks: 01_verify_cpu.yml
+  tags:
+    - step01
+    - verify
+
+- name: "Step 02 - Install the Virtualization Host group plus virt-install and virt-viewer"
+  ansible.builtin.import_tasks: 02_install_packages.yml
+  tags:
+    - step02
+    - install
+
+- name: "Step 03 - Start and enable libvirtd"
+  ansible.builtin.import_tasks: 03_enable_libvirtd.yml
+  tags:
+    - step03
+    - service
+
+- name: "Step 04 - Confirm a clean virsh baseline"
+  ansible.builtin.import_tasks: 04_baseline_virsh.yml
+  tags:
+    - step04
+    - baseline
+
+- name: "Step 05 - Add the training user to the libvirt group"
+  ansible.builtin.import_tasks: 05_libvirt_group.yml
+  tags:
+    - step05
+    - access

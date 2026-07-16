@@ -1,0 +1,5 @@
+---
+- name: Restart libvirtd
+  ansible.builtin.systemd:
+    name: "{{ kvm_libvirt_service }}"
+    state: restarted

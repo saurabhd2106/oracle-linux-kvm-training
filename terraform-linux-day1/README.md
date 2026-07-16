@@ -83,6 +83,12 @@ For better security, set `ssh_allowed_cidr` to your public IP address or trusted
 ssh_allowed_cidr = "203.0.113.10/32"
 ```
 
+Inbound TCP ports are controlled by `allowed_ingress_ports`. Add any port you need to the list and re-apply; every port is opened from `ssh_allowed_cidr`:
+
+```hcl
+allowed_ingress_ports = [22, 80, 8080]
+```
+
 ## Deploy
 
 Initialize Terraform:

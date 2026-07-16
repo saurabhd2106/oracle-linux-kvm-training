@@ -1,0 +1,20 @@
+---
+# 04 - Confirm a clean virsh baseline (no domains, default network present).
+
+- name: List all libvirt domains (virsh list --all)
+  ansible.builtin.command: virsh list --all
+  register: kvm_virsh_domains
+  changed_when: false
+
+- name: Show virsh list --all output
+  ansible.builtin.debug:
+    var: kvm_virsh_domains.stdout_lines
+
+- name: List all libvirt networks (virsh net-list --all)
+  ansible.builtin.command: virsh net-list --all
+  register: kvm_virsh_networks
+  changed_when: false
+
+- name: Show virsh net-list --all output
+  ansible.builtin.debug:
+    var: kvm_virsh_networks.stdout_lines

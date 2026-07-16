@@ -1,0 +1,57 @@
+---
+# 01 - Verify CPU virtualization extensions and nested-virt support.
+
+- name: Read CPU flags from /proc/cpuinfo
+  ansible.builtin.command: grep -E -m1 '^flags\s*:' /proc/cpuinfo
+  register: kvm_cpu_flags
+  changed_when: false
+
+- name: Assert hardware virtualization extensions (vmx/svm) are present
+  ansible.builtin.assert:
+    that:
+      - "'vmx' in kvm_cpu_flags.stdout or 'svm' in kvm_cpu_flags.stdout"
+    fail_msg: >-
+      No CPU virtualization extensions (vmx/svm) found. This OCI shape does not
+      expose hardware virtualization, so KVM cannot run here.
+    success_msg: "CPU virtualization extensions detected ({{ 'svm (AMD)' if 'svm' in kvm_cpu_flags.stdout else 'vmx (Intel)' }})."
+
+- name: Discover the loaded KVM vendor module (kvm_amd/kvm_intel)
+  ansible.builtin.find:
+    paths:
+      - /sys/module/kvm_amd/parameters
+      - /sys/module/kvm_intel/parameters
+    patterns: nested
+    file_type: any
+  register: kvm_nested_param
+
+- name: Read the nested-virtualization flag
+  ansible.builtin.slurp:
+    src: "{{ kvm_nested_param.files[0].path }}"
+  register: kvm_nested_raw
+  when: kvm_nested_param.matched > 0
+
+- name: Report nested-virtualization support
+  ansible.builtin.debug:
+    msg: >-
+      Nested virtualization is
+      {{ 'ENABLED' if (kvm_nested_param.matched > 0 and (kvm_nested_raw.content | b64decode | trim) in ['1', 'Y']) else 'not enabled or not reported by the kvm module' }}.
+
+- name: Check whether virt-host-validate is already installed
+  ansible.builtin.command: command -v virt-host-validate
+  register: kvm_host_validate_bin
+  changed_when: false
+  failed_when: false
+
+- name: Run virt-host-validate when the tooling is already installed
+  ansible.builtin.command: virt-host-validate qemu
+  register: kvm_host_validate
+  changed_when: false
+  failed_when: false
+  when: kvm_host_validate_bin.rc == 0
+
+- name: Show virt-host-validate output when available
+  ansible.builtin.debug:
+    var: kvm_host_validate.stdout_lines
+  when:
+    - kvm_host_validate is defined
+    - kvm_host_validate.stdout_lines is defined

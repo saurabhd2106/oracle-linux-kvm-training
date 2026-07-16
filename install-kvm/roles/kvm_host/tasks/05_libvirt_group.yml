@@ -1,0 +1,36 @@
+---
+# 05 - Add the training user to the libvirt group and confirm passwordless virsh.
+
+- name: Ensure the libvirt group exists
+  ansible.builtin.group:
+    name: "{{ kvm_libvirt_group }}"
+    state: present
+
+- name: Add the training user to the libvirt group
+  ansible.builtin.user:
+    name: "{{ kvm_training_user }}"
+    groups: "{{ kvm_libvirt_group }}"
+    append: true
+  register: kvm_group_change
+
+- name: Confirm passwordless virsh access for the training user
+  # sg starts a fresh shell with the libvirt group active, so this works within
+  # the same connection even though the user's existing sessions predate the
+  # group change. No sudo is used, proving unprivileged access to the daemon.
+  ansible.builtin.command: sg {{ kvm_libvirt_group }} -c "virsh -c qemu:///system list --all"
+  become: true
+  become_user: "{{ kvm_training_user }}"
+  register: kvm_user_virsh
+  changed_when: false
+
+- name: Show passwordless virsh output for the training user
+  ansible.builtin.debug:
+    var: kvm_user_virsh.stdout_lines
+
+- name: Note when a fresh login is needed for existing sessions
+  ansible.builtin.debug:
+    msg: >-
+      {{ kvm_training_user }} was added to the {{ kvm_libvirt_group }} group.
+      Any existing SSH sessions must log out and back in before the new group
+      membership applies to them.
+  when: kvm_group_change is changed

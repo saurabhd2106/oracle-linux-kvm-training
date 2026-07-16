@@ -1,0 +1,7 @@
+---
+- name: Install the virt-manager GUI and enable SSH X11 forwarding
+  hosts: kvm_hosts
+  become: true
+  gather_facts: true
+  roles:
+    - virt_manager

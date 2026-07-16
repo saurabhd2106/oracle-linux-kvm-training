@@ -1,0 +1,7 @@
+---
+- name: Install and validate KVM/libvirt on the Oracle Linux 9 lab host
+  hosts: kvm_hosts
+  become: true
+  gather_facts: true
+  roles:
+    - kvm_host

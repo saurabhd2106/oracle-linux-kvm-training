@@ -1,0 +1,23 @@
+---
+# 02 - Install the OL9 "Virtualization Host" group plus virt-install and virt-viewer.
+
+- name: Install the "Virtualization Host" package group (pulls in qemu-kvm and libvirt)
+  ansible.builtin.dnf:
+    name: "@{{ kvm_package_group }}"
+    state: present
+
+- name: Install the virtualization management tooling
+  ansible.builtin.dnf:
+    name: "{{ kvm_packages }}"
+    state: present
+
+- name: Confirm the KVM kernel modules are loaded
+  ansible.builtin.command: lsmod
+  register: kvm_lsmod
+  changed_when: false
+
+- name: Report KVM kernel module status
+  ansible.builtin.debug:
+    msg: >-
+      KVM kernel modules
+      {{ 'are loaded' if 'kvm' in kvm_lsmod.stdout else 'are NOT loaded yet (a reboot may be required)' }}.

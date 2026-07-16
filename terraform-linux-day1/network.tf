@@ -39,15 +39,18 @@ resource "oci_core_security_list" "public" {
   vcn_id         = oci_core_vcn.main.id
   display_name   = "${local.name_base}-public-sl"
 
-  ingress_security_rules {
-    description = "Allow SSH from the configured CIDR range"
-    protocol    = "6"
-    source      = var.ssh_allowed_cidr
-    source_type = "CIDR_BLOCK"
+  dynamic "ingress_security_rules" {
+    for_each = toset(var.allowed_ingress_ports)
+    content {
+      description = "Allow TCP port ${ingress_security_rules.value} from the configured CIDR range"
+      protocol    = "6"
+      source      = var.ssh_allowed_cidr
+      source_type = "CIDR_BLOCK"
 
-    tcp_options {
-      min = 22
-      max = 22
+      tcp_options {
+        min = ingress_security_rules.value
+        max = ingress_security_rules.value
+      }
     }
   }
 

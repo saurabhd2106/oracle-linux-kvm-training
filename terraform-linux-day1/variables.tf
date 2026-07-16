@@ -141,6 +141,19 @@ variable "ssh_allowed_cidr" {
   default     = "0.0.0.0/0"
 }
 
+variable "allowed_ingress_ports" {
+  description = "TCP ports allowed inbound from ssh_allowed_cidr on the public security list."
+  type        = list(number)
+  default     = [22]
+
+  validation {
+    condition = alltrue([
+      for port in var.allowed_ingress_ports : port >= 1 && port <= 65535
+    ])
+    error_message = "allowed_ingress_ports values must be between 1 and 65535."
+  }
+}
+
 variable "ssh_private_key_path" {
   description = "Optional override for the local path where Terraform writes the generated VM SSH private key. When null, it is derived as ./generated/<name_prefix>-<project_name>."
   type        = string

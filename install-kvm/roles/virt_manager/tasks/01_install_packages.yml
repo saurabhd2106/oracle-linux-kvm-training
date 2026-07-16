@@ -1,0 +1,16 @@
+---
+# 01 - Install the virt-manager GUI and the X11 forwarding prerequisites.
+
+- name: Install virt-manager and X11 forwarding packages
+  ansible.builtin.dnf:
+    name: "{{ virt_manager_packages }}"
+    state: present
+
+- name: Confirm the virt-manager binary is available
+  ansible.builtin.command: command -v virt-manager
+  register: virt_manager_bin
+  changed_when: false
+
+- name: Report virt-manager installation
+  ansible.builtin.debug:
+    msg: "virt-manager is installed at {{ virt_manager_bin.stdout }}"

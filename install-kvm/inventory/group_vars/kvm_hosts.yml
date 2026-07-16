@@ -1,0 +1,13 @@
+---
+# Training user that should get passwordless virsh access (matches the Terraform SSH user).
+kvm_training_user: opc
+
+# Oracle Linux 9 default KVM stack: the "Virtualization Host" dnf group plus tooling.
+kvm_package_group: "Virtualization Host"
+kvm_packages:
+  - virt-install
+  - virt-viewer
+
+# Service and group names used across the role.
+kvm_libvirt_service: libvirtd
+kvm_libvirt_group: libvirt

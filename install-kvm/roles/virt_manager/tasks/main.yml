@@ -1,0 +1,12 @@
+---
+- name: "Step 01 - Install virt-manager and X11 forwarding prerequisites"
+  ansible.builtin.import_tasks: 01_install_packages.yml
+  tags:
+    - step01
+    - install
+
+- name: "Step 02 - Enable SSH X11 forwarding"
+  ansible.builtin.import_tasks: 02_enable_x11_forwarding.yml
+  tags:
+    - step02
+    - x11

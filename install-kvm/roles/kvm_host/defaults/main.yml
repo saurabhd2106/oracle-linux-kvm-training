@@ -1,0 +1,14 @@
+---
+# Authoritative defaults for the kvm_host role. These are overridden by
+# inventory/group_vars/kvm_hosts.yml when running the full playbook, and they
+# guarantee sane values when individual steps are run via --tags.
+
+kvm_training_user: opc
+
+kvm_package_group: "Virtualization Host"
+kvm_packages:
+  - virt-install
+  - virt-viewer
+
+kvm_libvirt_service: libvirtd
+kvm_libvirt_group: libvirt

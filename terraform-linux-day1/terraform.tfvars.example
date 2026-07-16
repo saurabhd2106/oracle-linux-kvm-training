@@ -32,6 +32,9 @@ public_subnet_cidr_block = "10.0.1.0/24"
 # For production, replace this with your workstation or corporate public IP range.
 ssh_allowed_cidr = "0.0.0.0/0"
 
+# TCP ports opened inbound from ssh_allowed_cidr. Add any port you need here.
+allowed_ingress_ports = [22, 80, 8080]
+
 # Optional: Terraform writes the generated VM SSH private key with 0600 permissions.
 # Leave commented to use the unique default ./generated/<name_prefix>-<project_name>.
 # ssh_private_key_path = "./generated/linux-day1"

@@ -1,0 +1,17 @@
+---
+# 03 - Start and enable libvirtd, then confirm with systemctl status.
+
+- name: Ensure libvirtd is enabled and started
+  ansible.builtin.systemd:
+    name: "{{ kvm_libvirt_service }}"
+    enabled: true
+    state: started
+
+- name: Confirm libvirtd status with systemctl
+  ansible.builtin.command: systemctl status {{ kvm_libvirt_service }}
+  register: kvm_libvirtd_status
+  changed_when: false
+
+- name: Show systemctl status libvirtd output
+  ansible.builtin.debug:
+    var: kvm_libvirtd_status.stdout_lines

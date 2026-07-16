@@ -1,0 +1,25 @@
+---
+# 02 - Enable SSH X11 forwarding so virt-manager can be launched via `ssh -X`.
+
+- name: Enable X11Forwarding in sshd_config
+  ansible.builtin.lineinfile:
+    path: "{{ virt_manager_sshd_config }}"
+    regexp: '^#?\s*X11Forwarding'
+    line: "X11Forwarding yes"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Restart sshd
+
+- name: Ensure X11UseLocalhost is enabled in sshd_config
+  ansible.builtin.lineinfile:
+    path: "{{ virt_manager_sshd_config }}"
+    regexp: '^#?\s*X11UseLocalhost'
+    line: "X11UseLocalhost yes"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Restart sshd
+
+- name: Remind how to launch the GUI
+  ansible.builtin.debug:
+    msg: >-
+      X11 forwarding is enabled. Reconnect from your workstation with
+      `ssh -X ... opc@<public-ip>` (an X server such as XQuartz must be running)
+      and then run `virt-manager`.
