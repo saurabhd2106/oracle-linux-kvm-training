@@ -1,0 +1,20 @@
+# Default parameters for kcli_plan.yml.
+# kcli reads this file automatically when it sits next to the plan.
+# Override any value at runtime with -P, e.g. -P vm_count=8.
+
+# Number of identical VMs to deploy (ol9-vm1 .. ol9-vm<vm_count>).
+vm_count: 5
+
+# Golden image to clone (created by bootstrap.sh via `kcli download image ... ol9`).
+base_image: ol9
+
+# libvirt storage pool that holds the image and the per-VM clones.
+pool: default
+
+# Per-VM hardware.
+numcpus: 2
+memory: 2048
+disk_size: 20
+
+# libvirt network the VMs attach to (the default NAT network).
+network: default

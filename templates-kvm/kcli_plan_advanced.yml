@@ -1,0 +1,91 @@
+# Advanced kcli plan: custom network, dedicated storage pool, per-VM limits.
+#
+# Goes beyond kcli_plan.yml to show off richer deployment features:
+#   - a dedicated NAT network with its own subnet, DHCP range and DNS domain
+#   - a dedicated storage pool that bounds where the VM clones live
+#   - per-VM resource limits: fixed CPU/memory, CPU pinning, NUMA placement,
+#     and a size-capped extra data disk
+#   - richer cloud-init: guest agent, extra data-disk formatting, MOTD file
+#
+# Self-contained: defaults live in the inline `parameters:` block below and can
+# still be overridden at runtime with -P (e.g. -P vm_count=5).
+#
+# One-time prerequisite (kcli creates the pool dir as the calling user):
+#   sudo install -d -o qemu -g qemu /var/lib/libvirt/ol9pool
+#
+# Deploy:  kcli create plan -f kcli_plan_advanced.yml advancedvms
+# Destroy: kcli delete plan advancedvms
+
+parameters:
+  vm_count: 3
+  base_image: ol9
+  net_name: ol9net
+  net_cidr: 10.99.0.0/24
+  net_domain: lab.local
+  dhcp_start: 10.99.0.100
+  dhcp_end: 10.99.0.200
+  pool_name: ol9pool
+  pool_path: /var/lib/libvirt/ol9pool
+  numcpus: 2
+  memory: 2048
+  os_disk_size: 20
+  data_disk_size: 10
+  host_cpus: 4
+
+# 1) Custom NAT network with its own subnet, DHCP range and DNS domain.
+#    Set nat: false to make it an isolated (host-only) network instead.
+"{{ net_name }}":
+  type: network
+  cidr: "{{ net_cidr }}"
+  nat: true
+  dhcp: true
+  domain: "{{ net_domain }}"
+  dhcp_start: "{{ dhcp_start }}"
+  dhcp_end: "{{ dhcp_end }}"
+
+# 2) Dedicated storage pool that bounds where the clones are created.
+"{{ pool_name }}":
+  type: pool
+  path: "{{ pool_path }}"
+
+# 3) VMs with resource limits + richer cloud-init.
+{% for num in range(1, vm_count + 1) %}
+ol9-adv{{ num }}:
+  image: "{{ base_image }}"
+  pool: "{{ pool_name }}"
+  numcpus: {{ numcpus }}
+  memory: {{ memory }}
+  cpumodel: host-model
+  cpupinning:
+    - vcpus: "0-{{ numcpus - 1 }}"
+      hostcpus: "{{ (num - 1) % host_cpus }}"
+  numamode: preferred
+  guestagent: true
+  autostart: true
+  nested: true
+  rng: true
+  uefi: true
+  tags:
+    - env=lab
+    - tier=advanced
+  disks:
+    - size: {{ os_disk_size }}
+      thin: true
+    - size: {{ data_disk_size }}
+      thin: true
+  nets:
+    - name: "{{ net_name }}"
+      type: virtio
+  cmds:
+    - dnf -y install qemu-guest-agent
+    - systemctl enable --now qemu-guest-agent
+    - blkid /dev/vdb || mkfs.xfs /dev/vdb
+    - mkdir -p /data && grep -q /data /etc/fstab || echo '/dev/vdb /data xfs defaults 0 0' >> /etc/fstab
+    - mount -a
+  files:
+    - path: /etc/motd
+      content: |
+        Advanced kcli-provisioned OL9 VM on {{ net_domain }}
+      mode: 644
+      owner: root
+{% endfor %}

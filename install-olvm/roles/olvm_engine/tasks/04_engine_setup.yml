@@ -1,0 +1,38 @@
+---
+# 04 - Render the OTOPI answer file and run engine-setup unattended. The
+# post-install config file created by a successful run acts as our idempotency
+# marker so re-runs do not reconfigure an already-provisioned Manager.
+
+- name: Check whether the Engine has already been configured
+  ansible.builtin.stat:
+    path: /etc/ovirt-engine-setup.conf.d/20-setup-ovirt-post.conf
+  register: olvm_engine_configured
+
+- name: Render the engine-setup answer file
+  ansible.builtin.template:
+    src: answer.txt.j2
+    dest: /root/answer.txt
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  when: not olvm_engine_configured.stat.exists
+
+- name: Run engine-setup with the answer file
+  ansible.builtin.command: engine-setup --config=/root/answer.txt --accept-defaults
+  register: olvm_engine_setup_run
+  when: not olvm_engine_configured.stat.exists
+  changed_when: olvm_engine_setup_run.rc == 0
+
+- name: Remove the rendered answer file (it contains the admin password)
+  ansible.builtin.file:
+    path: /root/answer.txt
+    state: absent
+
+- name: Report the engine-setup log location
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'engine-setup completed. See the setup log under
+      /var/log/ovirt-engine/setup/ for details.'
+      if not olvm_engine_configured.stat.exists
+      else 'Engine already configured; skipped engine-setup.' }}

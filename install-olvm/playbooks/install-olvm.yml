@@ -1,0 +1,7 @@
+---
+- name: Install and configure the OLVM 4.5 Engine on the Oracle Linux 8 host
+  hosts: olvm_hosts
+  become: true
+  gather_facts: true
+  roles:
+    - olvm_engine

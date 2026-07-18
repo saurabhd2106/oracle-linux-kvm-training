@@ -1,0 +1,48 @@
+# Copy this file to terraform.tfvars and replace placeholder values before running Terraform.
+
+tenancy_ocid     = "ocid1.tenancy.oc1..exampleuniqueid"
+user_ocid        = "ocid1.user.oc1..exampleuniqueid"
+fingerprint      = "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"
+private_key_path = "~/.oci/oci_api_key.pem"
+region           = "ap-sydney-1"
+compartment_ocid = "ocid1.compartment.oc1..exampleuniqueid"
+
+# Set a unique prefix per person (2-6 lowercase alphanumeric characters) so
+# multiple people can run this same code in the same tenancy without name
+# clashes. Example: "sau" yields sau-linux-ol8-vm, sau-linux-ol8-vcn, etc.
+name_prefix  = "sau"
+project_name = "linux-ol8"
+
+# Optional: override the auto-derived names/paths. Leave commented to use the
+# unique names built from name_prefix and project_name.
+# instance_display_name = "linux-ol8-vm"
+# hostname_label        = "linuxol8"
+
+# VM.Standard.E5.Flex with 4 OCPUs and 16 GB memory (OLVM Engine recommended).
+instance_shape         = "VM.Standard.E5.Flex"
+instance_ocpus         = 4
+instance_memory_in_gbs = 16
+
+# 100 GB boot volume holds the Engine, PostgreSQL, DWH, Grafana, and logs.
+boot_volume_size_in_gbs = 100
+
+# The OLVM 4.5 Engine requires Oracle Linux 8.8+.
+oracle_linux_version = "8"
+
+vcn_cidr_block           = "10.0.0.0/16"
+public_subnet_cidr_block = "10.0.1.0/24"
+
+# For production, replace this with your workstation or corporate public IP range.
+ssh_allowed_cidr = "0.0.0.0/0"
+
+# TCP ports opened inbound from ssh_allowed_cidr: SSH plus the Engine web portals.
+allowed_ingress_ports = [22, 80, 443]
+
+# Optional: Terraform writes the generated VM SSH private key with 0600 permissions.
+# Leave commented to use the unique default ./generated/<name_prefix>-<project_name>.
+# ssh_private_key_path = "./generated/linux-ol8"
+
+freeform_tags = {
+  managed-by = "terraform"
+  project    = "linux-ol8"
+}

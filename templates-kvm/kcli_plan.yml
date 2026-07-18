@@ -1,0 +1,25 @@
+# kcli plan: deploy vm_count identical Oracle Linux 9 VMs from a golden image.
+#
+# Each VM is a thin copy-on-write clone of the golden "ol9" image (cloned in
+# seconds) and is personalized on first boot by cloud-init: kcli auto-injects
+# your SSH public key and sets the hostname, and the cmds below run once.
+#
+# Defaults come from kcli_parameters.yml; override with -P (e.g. -P vm_count=8).
+#
+# Deploy:  kcli create plan -f kcli_plan.yml templatevms
+# Destroy: kcli delete plan templatevms
+
+{% for num in range(1, vm_count + 1) %}
+ol9-vm{{ num }}:
+  image: "{{ base_image }}"
+  pool: "{{ pool }}"
+  numcpus: {{ numcpus }}
+  memory: {{ memory }}
+  disks:
+    - size: {{ disk_size }}
+      thin: true
+  nets:
+    - "{{ network }}"
+  cmds:
+    - dnf -y update
+{% endfor %}

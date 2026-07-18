@@ -1,0 +1,57 @@
+---
+# 01 - Validate the host meets OLVM 4.5 Engine requirements and give it a
+# resolvable FQDN, which engine-setup insists on.
+
+- name: Require the engine admin password to be provided
+  ansible.builtin.assert:
+    that:
+      - olvm_admin_password is defined
+      - olvm_admin_password | length > 0
+    fail_msg: >-
+      olvm_admin_password is not set. Provide it on the command line
+      (-e olvm_admin_password=...) or via an ansible-vault file.
+    success_msg: "Engine admin password supplied."
+    quiet: true
+  no_log: true
+
+- name: Assert the host runs Oracle Linux 8
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'OracleLinux'
+      - ansible_facts['distribution_major_version'] == '8'
+    fail_msg: >-
+      OLVM 4.5 Engine requires Oracle Linux 8.8+. Detected
+      {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}.
+      Redeploy the VM on Oracle Linux 8 (set oracle_linux_version = "8" in
+      terraform.tfvars) or target an existing OL8 host.
+    success_msg: "Host is Oracle Linux {{ ansible_facts['distribution_version'] }}."
+    quiet: true
+
+- name: Warn when available memory is below the recommended 16 GB
+  ansible.builtin.debug:
+    msg: >-
+      Only {{ ansible_facts['memtotal_mb'] }} MB RAM detected. OLVM recommends
+      at least 16384 MB for the Engine; setup continues but may run slowly.
+  when: ansible_facts['memtotal_mb'] | int < 16384
+
+- name: Set the system hostname to the Engine FQDN
+  ansible.builtin.hostname:
+    name: "{{ olvm_engine_fqdn }}"
+
+- name: Ensure the Engine FQDN resolves to the primary IP via /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '^\s*{{ ansible_facts["default_ipv4"]["address"] }}\s'
+    line: "{{ ansible_facts['default_ipv4']['address'] }} {{ olvm_engine_fqdn }} {{ olvm_engine_fqdn.split('.')[0] }}"
+    state: present
+
+- name: Ensure chronyd is installed for time synchronization
+  ansible.builtin.dnf:
+    name: chrony
+    state: present
+
+- name: Ensure chronyd is enabled and running
+  ansible.builtin.systemd:
+    name: chronyd
+    enabled: true
+    state: started
