@@ -1,13 +1,14 @@
-# OCI Oracle Linux VM
+# OCI Oracle Linux VMs
 
-This Terraform code provisions an Oracle Linux virtual machine on Oracle Cloud Infrastructure (OCI) with:
+This Terraform code provisions one or more Oracle Linux virtual machines on Oracle Cloud Infrastructure (OCI). The number of VMs and their per-VM settings are configurable via the `vms` map. Each VM gets:
 
-- Shape: `VM.Standard.E5.Flex`
-- OCPUs: `4`
-- Memory: `16 GB`
-- Public subnet with internet gateway
-- Public IP assigned to the VM
-- Terraform-generated SSH key pair for `opc` login
+- Shape: `VM.Standard.E5.Flex` (default, per-VM overridable)
+- OCPUs: `4` (default, per-VM overridable)
+- Memory: `16 GB` (default, per-VM overridable)
+- Its own attached data block volume
+- A public IP on a shared public subnet with internet gateway
+
+Networking (VCN, subnet, internet gateway, route table, security list) and a single Terraform-generated SSH key pair for `opc` login are shared across all VMs.
 
 ## Prerequisites
 
@@ -29,10 +30,12 @@ For tighter production access, replace `all-resources` with the exact OCI resour
 - `versions.tf`: Terraform and provider version constraints
 - `provider.tf`: OCI provider configuration
 - `variables.tf`: Input variables and defaults
-- `network.tf`: VCN, internet gateway, route table, security list, and public subnet
-- `ssh.tf`: Generated SSH key pair and local private key file
-- `compute.tf`: Oracle Linux compute instance
-- `outputs.tf`: Instance details and SSH connection command
+- `network.tf`: VCN, internet gateway, route table, security list, and public subnet (shared)
+- `ssh.tf`: Generated SSH key pair and local private key file (shared)
+- `compute.tf`: Oracle Linux compute instances (one per entry in `vms`)
+- `storage.tf`: Per-VM data block volumes and attachments
+- `moved.tf`: State-migration blocks that preserve the original single VM as `vm1`
+- `outputs.tf`: Per-VM instance details and SSH connection commands
 - `terraform.tfvars.example`: Safe example values
 
 ## Configure
@@ -57,25 +60,45 @@ name_prefix      = "sau"
 
 ### Unique names for shared tenancies
 
-Set a unique `name_prefix` (2-6 lowercase alphanumeric characters, for example `sau`) so multiple people can run this same code in the same OCI tenancy without name clashes. Every resource name is derived from it:
+Set a unique `name_prefix` (2-6 lowercase alphanumeric characters, for example `sau`) so multiple people can run this same code in the same OCI tenancy without name clashes. Every resource name is derived from it and the VM key:
 
-| Resource | Example name (`name_prefix = "sau"`) |
+| Resource | Example name (`name_prefix = "sau"`, VM key `vm1`) |
 |---|---|
-| VM display name | `sau-linux-day1-vm` |
-| VM hostname label | `saulinuxday1` |
+| VM display name | `sau-linux-day1-vm1` |
+| VM hostname label | `saulinuxday1vm1` |
 | VCN / subnet / gateway / etc. | `sau-linux-day1-vcn`, `sau-linux-day1-public-subnet`, ... |
-| Data block volume | `sau-linux-day1-data-volume` |
-| SSH private key path | `./generated/sau-linux-day1` |
+| Data block volume | `sau-linux-day1-vm1-data-volume` |
+| SSH private key path (shared) | `./generated/sau-linux-day1` |
 
-You can still override `instance_display_name`, `hostname_label`, or `ssh_private_key_path` explicitly, but leaving them unset keeps names unique per person automatically.
+You can override a VM's `display_name` or `hostname_label` per entry in the `vms` map, or override `ssh_private_key_path` globally, but leaving them unset keeps names unique per person automatically.
 
-The default compute settings already match the requested VM:
+### Configuring the VMs
+
+The `vms` variable is a map keyed by short VM name. The number of VMs equals the number of entries, so add or remove keys to scale up or down. An empty object `{}` uses the global defaults; set any field to override it for that VM:
+
+```hcl
+vms = {
+  vm1 = {}
+  vm2 = {}
+  vm3 = {
+    instance_ocpus          = 2
+    instance_memory_in_gbs  = 8
+    data_volume_size_in_gbs = 100
+  }
+}
+```
+
+Per-VM overridable fields: `display_name`, `hostname_label`, `instance_shape`, `instance_ocpus`, `instance_memory_in_gbs`, `boot_volume_size_in_gbs`, `data_volume_size_in_gbs`. Any field left unset falls back to the global defaults:
 
 ```hcl
 instance_shape         = "VM.Standard.E5.Flex"
 instance_ocpus         = 4
 instance_memory_in_gbs = 16
 ```
+
+Mixed architectures are supported: the latest Oracle Linux image is resolved per distinct shape, so you can mix x86 (`VM.Standard.E5.Flex`) and ARM (`VM.Standard.A1.Flex`) VMs in the same `vms` map.
+
+> Preserving the original VM: if you previously applied this code when it created a single VM, the `moved` blocks in `moved.tf` map that instance (and its data volume/attachment) to the `vm1` key. Keep a `vm1` entry in `vms` so `terraform plan` shows `vm1` updated in place (a display-name/hostname rename) rather than destroyed and recreated.
 
 For better security, set `ssh_allowed_cidr` to your public IP address or trusted network instead of leaving it open:
 
@@ -119,13 +142,19 @@ The file is created with `0600` permissions and is ignored by Git.
 
 ## Connect
 
-After `terraform apply`, use the generated output:
+After `terraform apply`, the SSH commands are output per VM as a map:
 
 ```sh
-terraform output ssh_command
+terraform output ssh_commands
 ```
 
-Or connect manually:
+To connect to a specific VM by key:
+
+```sh
+$(terraform output -raw -json ssh_commands | jq -r '.vm1')
+```
+
+Or connect manually using the public IP from `terraform output instance_public_ips`:
 
 ```sh
 ssh -i ./generated/sau-linux-day1 opc@<public-ip>

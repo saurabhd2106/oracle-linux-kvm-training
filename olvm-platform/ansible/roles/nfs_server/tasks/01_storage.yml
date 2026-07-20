@@ -1,0 +1,68 @@
+---
+# 01 - Find the extra block volume attached by Terraform, put a filesystem on it,
+# and mount it at the export path. The export dir is owned by the OLVM vdsm:kvm
+# uid:gid (36:36) so it can be used directly as a storage domain.
+
+- name: Identify the OS/boot disk from the root mount
+  ansible.builtin.set_fact:
+    nfs_boot_disk: >-
+      {{ (ansible_facts.mounts
+          | selectattr('mount', 'equalto', '/')
+          | map(attribute='device')
+          | first
+          | regex_replace('^/dev/', '')
+          | regex_replace('p?[0-9]+$', '')) }}
+
+- name: Auto-detect the data disk when nfs_data_device is not set
+  ansible.builtin.set_fact:
+    nfs_data_device: "/dev/{{ item.key }}"
+  loop: "{{ ansible_facts.devices | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - nfs_data_device | length == 0
+    - item.key != nfs_boot_disk
+    - item.value.partitions | length == 0
+    - item.value.holders | length == 0
+    - item.key is match('^(sd|vd|xvd|nvme)')
+
+- name: Fail when no data disk could be resolved
+  ansible.builtin.assert:
+    that:
+      - nfs_data_device | length > 0
+    fail_msg: >-
+      Could not resolve a data disk to use for the NFS export. Attach a block
+      volume to this VM (the Terraform stack does this for the nfs role) or set
+      nfs_data_device explicitly in group_vars/nfs_server.yml.
+    success_msg: "Using data device {{ nfs_data_device }} for the NFS export."
+    quiet: true
+
+- name: Create a filesystem on the data device
+  community.general.filesystem:
+    fstype: "{{ nfs_filesystem }}"
+    dev: "{{ nfs_data_device }}"
+  register: nfs_mkfs
+
+- name: Ensure the export directory exists
+  ansible.builtin.file:
+    path: "{{ nfs_export_path }}"
+    state: directory
+    owner: "{{ nfs_owner_uid }}"
+    group: "{{ nfs_owner_gid }}"
+    mode: "0755"
+
+- name: Mount the data device at the export path and persist it in fstab
+  ansible.posix.mount:
+    path: "{{ nfs_export_path }}"
+    src: "{{ nfs_data_device }}"
+    fstype: "{{ nfs_filesystem }}"
+    opts: defaults
+    state: mounted
+
+- name: Re-assert ownership/permissions on the mounted export directory
+  ansible.builtin.file:
+    path: "{{ nfs_export_path }}"
+    state: directory
+    owner: "{{ nfs_owner_uid }}"
+    group: "{{ nfs_owner_gid }}"
+    mode: "0755"

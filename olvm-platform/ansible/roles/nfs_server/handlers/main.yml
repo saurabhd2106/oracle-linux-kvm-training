@@ -1,0 +1,10 @@
+---
+- name: Reload nfs exports
+  ansible.builtin.command: exportfs -ra
+  changed_when: true
+
+- name: Reload firewalld
+  ansible.builtin.command: firewall-cmd --reload
+  register: nfs_firewalld_reload
+  changed_when: nfs_firewalld_reload.rc == 0
+  when: nfs_firewalld_active | default(false) | bool

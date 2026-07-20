@@ -1,0 +1,8 @@
+# Local inventory holds the environment-specific VM IPs; keep only the example.
+inventory/hosts.yml
+
+# Ansible artifacts
+*.retry
+
+# Ansible Vault password file - NEVER commit the plaintext passphrase
+.vault_pass

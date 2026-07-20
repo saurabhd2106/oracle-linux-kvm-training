@@ -1,0 +1,76 @@
+---
+# Prepare a fresh Oracle Linux 9.6+ host so that "Add Host" in the OLVM 4.5
+# Administration Portal succeeds on the first attempt. This role only preps the
+# KVM host side - it never installs or configures the Engine, never installs a
+# general KVM/libvirt/virtualization stack (OLVM installs its own pinned stack
+# when the host is added), and never touches power management.
+
+- name: Require the target hostname to be provided
+  ansible.builtin.assert:
+    that:
+      - target_hostname is defined
+      - target_hostname | length > 0
+    fail_msg: >-
+      target_hostname is not set. Set it per host in the inventory (or in
+      group_vars/kvm_hosts.yml), e.g. target_hostname: olvm-kvm-01.lab.local
+    success_msg: "Target hostname supplied: {{ target_hostname }}"
+    quiet: true
+  tags:
+    - always
+
+- name: Require the Engine SSH public key to be provided
+  ansible.builtin.assert:
+    that:
+      - engine_ssh_public_key is defined
+      - engine_ssh_public_key | length > 0
+    fail_msg: >-
+      engine_ssh_public_key is not set. Provide the OLVM Engine's public key as a
+      string, or a path to a local file containing it, in
+      group_vars/kvm_hosts.yml (or with -e engine_ssh_public_key=...).
+    success_msg: "Engine SSH public key supplied."
+    quiet: true
+  no_log: true
+  tags:
+    - always
+
+- name: "Step 01 - Validate the OS and guard against a pre-installed KVM stack"
+  ansible.builtin.import_tasks: 01_os_validation.yml
+  tags:
+    - step01
+    - os
+
+- name: "Step 02 - Set the hostname and validate network/virtualization support"
+  ansible.builtin.import_tasks: 02_hostname_network.yml
+  tags:
+    - step02
+    - network
+
+- name: "Step 03 - Install the OLVM release package and configure repositories"
+  ansible.builtin.import_tasks: 03_packages_repos.yml
+  tags:
+    - step03
+    - repos
+
+- name: "Step 04 - Run and parse the OLVM pre-check script"
+  ansible.builtin.import_tasks: 04_precheck.yml
+  tags:
+    - step04
+    - precheck
+
+- name: "Step 05 - Configure firewalld ports and emit the cloud security-list report"
+  ansible.builtin.import_tasks: 05_firewall.yml
+  tags:
+    - step05
+    - firewall
+
+- name: "Step 06 - Authorize the Engine's SSH key for root"
+  ansible.builtin.import_tasks: 06_ssh_auth.yml
+  tags:
+    - step06
+    - ssh
+
+- name: "Step 07 - Print the final readiness summary"
+  ansible.builtin.import_tasks: 07_summary.yml
+  tags:
+    - step07
+    - summary

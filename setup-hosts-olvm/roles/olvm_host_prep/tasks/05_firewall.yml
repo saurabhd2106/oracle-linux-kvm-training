@@ -1,0 +1,66 @@
+---
+# 05 - Open the OLVM ports in local firewalld when it is active, and ALWAYS emit
+# a structured report of the same ports for whoever maintains the cloud security
+# list / Terraform config. Local firewalld alone is not sufficient on cloud
+# infrastructure, and we never touch the cloud security list from here.
+
+- name: Check whether firewalld is active
+  ansible.builtin.command: firewall-cmd --state
+  register: olvm_firewalld_state
+  changed_when: false
+  failed_when: false
+
+- name: Set a fact for firewalld being active
+  ansible.builtin.set_fact:
+    olvm_firewalld_active: "{{ olvm_firewalld_state.rc == 0 and 'running' in olvm_firewalld_state.stdout }}"
+
+- name: Open the OLVM ports in firewalld
+  ansible.posix.firewalld:
+    port: "{{ item.port }}/{{ item.proto }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  loop: "{{ firewall_ports }}"
+  loop_control:
+    label: "{{ item.port }}/{{ item.proto }}"
+  when: olvm_firewalld_active | bool
+  notify: Reload firewalld
+
+- name: Report that firewalld is inactive (nothing opened locally)
+  ansible.builtin.debug:
+    msg: >-
+      firewalld is not active on this host; no local port rules were applied.
+      Ensure the ports below are allowed by the cloud security list instead.
+  when: not (olvm_firewalld_active | bool)
+
+- name: Build the cloud security-list / Terraform port report
+  ansible.builtin.set_fact:
+    olvm_port_report: >-
+      {{ firewall_ports
+         | map(attribute='port')
+         | zip(firewall_ports | map(attribute='proto'),
+               firewall_ports | map(attribute='required'))
+         | list }}
+
+- name: Emit the port report for the cloud security list (handled separately)
+  ansible.builtin.debug:
+    msg: >-
+      Ingress {{ item.0 }}/{{ item.1 }} from the OLVM Engine
+      ({{ 'REQUIRED' if item.2 else 'optional' }}) - add to the cloud security
+      list / Terraform config (not managed by this playbook).
+  loop: "{{ olvm_port_report }}"
+  loop_control:
+    label: "{{ item.0 }}/{{ item.1 }}"
+
+- name: Record the firewall result for the final summary
+  ansible.builtin.set_fact:
+    olvm_summary_ports: >-
+      {{ firewall_ports
+         | map(attribute='port')
+         | zip(firewall_ports | map(attribute='proto'))
+         | map('join', '/')
+         | list }}
+    olvm_summary_firewall: >-
+      {{ 'opened in local firewalld'
+         if olvm_firewalld_active | bool
+         else 'firewalld inactive - rely on the cloud security list' }}

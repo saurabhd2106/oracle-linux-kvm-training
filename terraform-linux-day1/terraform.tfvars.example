@@ -13,11 +13,22 @@ compartment_ocid = "ocid1.compartment.oc1..exampleuniqueid"
 name_prefix  = "sau"
 project_name = "linux-day1"
 
-# Optional: override the auto-derived names/paths. Leave commented to use the
-# unique names built from name_prefix and project_name.
-# instance_display_name = "linux-day1-vm"
-# hostname_label        = "linuxday1"
+# VMs to create, keyed by short name. Networking and the SSH keypair are shared
+# across all VMs. An empty object {} uses the global defaults below; set any
+# field to override it for that VM (display_name, hostname_label, instance_shape,
+# instance_ocpus, instance_memory_in_gbs, boot_volume_size_in_gbs,
+# data_volume_size_in_gbs). Add or remove entries to change the number of VMs.
+vms = {
+  vm1 = {}
+  vm2 = {}
+  vm3 = {
+    instance_ocpus          = 2
+    instance_memory_in_gbs  = 8
+    data_volume_size_in_gbs = 100
+  }
+}
 
+# Global defaults applied to any VM field left unset above.
 # VM.Standard.E5.Flex with 4 OCPUs and 16 GB memory.
 instance_shape         = "VM.Standard.E5.Flex"
 instance_ocpus         = 4

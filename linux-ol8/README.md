@@ -95,6 +95,12 @@ Inbound TCP ports are controlled by `allowed_ingress_ports`. The default opens S
 allowed_ingress_ports = [22, 80, 443]
 ```
 
+To open a contiguous range of ports as a single rule, use `allowed_ingress_port_ranges`. The default opens the OLVM console (VNC/SPICE) proxy range so VM consoles are reachable. Ranges are opened from the same `ssh_allowed_cidr`, so tighten `ssh_allowed_cidr` to a trusted network before exposing the console range:
+
+```hcl
+allowed_ingress_port_ranges = [{ min = 5900, max = 6923 }]
+```
+
 ## Deploy
 
 Initialize Terraform:

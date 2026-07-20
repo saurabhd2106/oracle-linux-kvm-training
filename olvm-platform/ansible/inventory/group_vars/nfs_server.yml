@@ -1,0 +1,22 @@
+---
+# Environment-specific values for the nfs_server group. Role defaults live in
+# roles/nfs_server/defaults/main.yml; override any of them here.
+
+# Directory that is exported over NFS and later added as an OLVM storage domain.
+nfs_export_path: /exports/olvm
+
+# Block device to format and mount at nfs_export_path. Leave empty ("") to
+# auto-detect the extra data volume attached by Terraform (the first unpartitioned
+# disk that is not the boot disk, typically /dev/sdb). Set explicitly to override.
+nfs_data_device: ""
+
+# Filesystem for the data volume.
+nfs_filesystem: xfs
+
+# Clients allowed to mount the export. Defaults to the whole VCN so the Engine
+# and both KVM hosts can reach it. Narrow this for production.
+nfs_allowed_clients: "{{ internal_network_cidr }}"
+
+# NFS export options. no_root_squash is required by OLVM storage domains; the
+# export dir is owned by the OLVM vdsm/kvm uid:gid (36:36).
+nfs_export_options: "rw,sync,no_root_squash,no_subtree_check"

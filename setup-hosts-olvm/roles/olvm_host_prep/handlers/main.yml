@@ -1,0 +1,6 @@
+---
+- name: Reload firewalld
+  ansible.builtin.command: firewall-cmd --reload
+  register: olvm_firewalld_reload
+  changed_when: olvm_firewalld_reload.rc == 0
+  when: olvm_firewalld_active | default(false) | bool

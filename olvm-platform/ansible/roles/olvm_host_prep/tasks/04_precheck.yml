@@ -1,0 +1,130 @@
+---
+# 04 - Run the OLVM pre-check script shipped by the release package and act on
+# its results. FAIL is fatal, except the package-count heuristic which is known
+# to false-positive on cloud base images (it counts pre-seeded packages); for
+# that one we cross-check whether a real KVM/libvirt/vdsm stack is installed.
+# WARN is informational and surfaced in the final summary, never swallowed.
+
+# Regex (case-insensitive) identifying the package-count heuristic FAIL line.
+- name: Set the package-count check matcher
+  ansible.builtin.set_fact:
+    olvm_precheck_pkgcount_regex: "{{ olvm_precheck_pkgcount_regex | default('(?i)package.*count|number of.*package|installed package') }}"
+
+- name: Locate the OLVM pre-check script from the release package
+  ansible.builtin.shell: >-
+    set -o pipefail;
+    rpm -ql {{ olvm_release_package }} | grep -E '/{{ olvm_precheck_script_name | regex_escape }}$' | head -n1
+  args:
+    executable: /bin/bash
+  register: olvm_precheck_path
+  changed_when: false
+  failed_when: false
+
+- name: Fall back to dnf provides when rpm -ql did not locate the script
+  ansible.builtin.shell: >-
+    set -o pipefail;
+    dnf -q provides '*/{{ olvm_precheck_script_name }}' 2>/dev/null
+    | grep -Eo '/[^ ]*/{{ olvm_precheck_script_name | regex_escape }}' | head -n1
+  args:
+    executable: /bin/bash
+  register: olvm_precheck_path_fallback
+  changed_when: false
+  failed_when: false
+  when: olvm_precheck_path.stdout | trim | length == 0
+
+- name: Resolve the pre-check script path
+  ansible.builtin.set_fact:
+    olvm_precheck_script: >-
+      {{ (olvm_precheck_path.stdout | trim)
+         if (olvm_precheck_path.stdout | trim | length > 0)
+         else (olvm_precheck_path_fallback.stdout | default('') | trim) }}
+
+- name: Warn and skip when the pre-check script cannot be found
+  ansible.builtin.debug:
+    msg: >-
+      Could not locate {{ olvm_precheck_script_name }} via
+      'rpm -ql {{ olvm_release_package }}' or 'dnf provides'. Skipping the
+      pre-check. Verify the release package installed correctly.
+  when: olvm_precheck_script | length == 0
+
+- name: Run the OLVM pre-check script
+  ansible.builtin.command: "python3 {{ olvm_precheck_script }}"
+  register: olvm_precheck_run
+  changed_when: false
+  failed_when: false
+  when: olvm_precheck_script | length > 0
+
+- name: Parse the pre-check output into FAIL and WARN lines
+  ansible.builtin.set_fact:
+    olvm_precheck_fail_lines: >-
+      {{ (olvm_precheck_run.stdout_lines | default([]) + olvm_precheck_run.stderr_lines | default([]))
+         | select('search', 'FAIL') | list }}
+    olvm_precheck_warn_lines: >-
+      {{ (olvm_precheck_run.stdout_lines | default([]) + olvm_precheck_run.stderr_lines | default([]))
+         | select('search', 'WARN') | list }}
+  when: olvm_precheck_script | length > 0
+
+- name: Split FAIL lines into package-count (heuristic) and genuine failures
+  ansible.builtin.set_fact:
+    olvm_precheck_pkgcount_fails: >-
+      {{ olvm_precheck_fail_lines | select('search', olvm_precheck_pkgcount_regex) | list }}
+    olvm_precheck_genuine_fails: >-
+      {{ olvm_precheck_fail_lines | reject('search', olvm_precheck_pkgcount_regex) | list }}
+  when: olvm_precheck_script | length > 0
+
+- name: Re-gather installed packages to cross-check the package-count heuristic
+  ansible.builtin.package_facts:
+    manager: auto
+  when:
+    - olvm_precheck_script | length > 0
+    - olvm_precheck_pkgcount_fails | length > 0
+
+- name: Cross-verify the package-count failure against the real KVM/libvirt stack
+  ansible.builtin.set_fact:
+    olvm_precheck_pkgcount_real: >-
+      {{ olvm_conflicting_packages | select('in', ansible_facts.packages) | list }}
+  when:
+    - olvm_precheck_script | length > 0
+    - olvm_precheck_pkgcount_fails | length > 0
+
+- name: Fail on the package-count check only if a real KVM/libvirt stack exists
+  ansible.builtin.fail:
+    msg: >-
+      Pre-check reported a package-count FAIL and a real virtualization stack is
+      installed ({{ olvm_precheck_pkgcount_real | join(', ') }}). This is a
+      genuine failure, not the known cloud-image false-positive. Remove the
+      stack (see step 01 guidance) before continuing.
+      Offending line(s): {{ olvm_precheck_pkgcount_fails | join(' | ') }}
+  when:
+    - olvm_precheck_script | length > 0
+    - olvm_precheck_pkgcount_fails | length > 0
+    - olvm_precheck_pkgcount_real | default([]) | length > 0
+
+- name: Note when the package-count FAIL was treated as a false-positive
+  ansible.builtin.debug:
+    msg: >-
+      Pre-check package-count FAIL treated as a known cloud-image false-positive
+      (no libvirt/qemu-kvm/vdsm actually installed).
+      Line(s): {{ olvm_precheck_pkgcount_fails | join(' | ') }}
+  when:
+    - olvm_precheck_script | length > 0
+    - olvm_precheck_pkgcount_fails | length > 0
+    - olvm_precheck_pkgcount_real | default([]) | length == 0
+
+- name: Fail on any genuine (non-package-count) pre-check FAIL
+  ansible.builtin.fail:
+    msg: >-
+      OLVM pre-check reported fatal failures:
+      {{ olvm_precheck_genuine_fails | join(' | ') }}
+  when:
+    - olvm_precheck_script | length > 0
+    - olvm_precheck_genuine_fails | default([]) | length > 0
+
+- name: Record the pre-check result for the final summary
+  ansible.builtin.set_fact:
+    olvm_summary_precheck: >-
+      {{ 'skipped (script not found)' if olvm_precheck_script | length == 0
+         else 'PASS - ' ~ (olvm_precheck_warn_lines | length) ~ ' warning(s), '
+              ~ (olvm_precheck_pkgcount_fails | default([]) | length)
+              ~ ' package-count false-positive(s) ignored' }}
+    olvm_summary_precheck_warns: "{{ olvm_precheck_warn_lines | default([]) }}"

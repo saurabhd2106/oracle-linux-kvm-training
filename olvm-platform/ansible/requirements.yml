@@ -1,0 +1,8 @@
+---
+# Ansible collections required by this project.
+#   ansible.posix     - firewalld, mount, authorized_key modules
+#   community.general - filesystem module (formats the NFS data volume)
+# Install with: ansible-galaxy collection install -r requirements.yml
+collections:
+  - name: ansible.posix
+  - name: community.general

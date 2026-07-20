@@ -1,0 +1,37 @@
+---
+# Authoritative defaults for the olvm_engine role. These are overridden by
+# inventory/group_vars/engine/ when running the full playbook, and they
+# guarantee sane values when individual steps are run via --tags.
+
+olvm_engine_fqdn: olvm-engine.lab.local
+olvm_pki_org: lab.local
+
+# Engine admin password (login: admin@ovirt). REQUIRED - no default is set on
+# purpose so the run fails fast if it is missing. Provide via -e or ansible-vault.
+olvm_allow_weak_password: true
+
+olvm_release_package: oracle-ovirt-release-45-el8
+olvm_required_repos:
+  - ol8_baseos_latest
+  - ol8_appstream
+  - ol8_kvm_appstream
+  - ovirt-4.5
+  - ovirt-4.5-extra
+  - ol8_gluster_appstream
+
+olvm_engine_package: ovirt-engine
+olvm_engine_setup_packages:
+  - ovirt-engine-setup
+  - ovirt-engine-setup-plugin-websocket-proxy
+  - ovirt-engine-dwh-setup
+  - ovirt-engine-dwh-grafana-integration-setup
+  - ovirt-engine-keycloak-setup
+
+olvm_application_mode: both
+olvm_configure_dwh: true
+olvm_configure_grafana: true
+olvm_configure_keycloak: true
+olvm_configure_ovn: true
+
+olvm_engine_service: ovirt-engine
+olvm_firewall_service: firewalld

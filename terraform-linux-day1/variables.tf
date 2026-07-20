@@ -55,20 +55,28 @@ variable "project_name" {
   }
 }
 
-variable "instance_display_name" {
-  description = "Optional override for the VM display name. When null, it is derived as <name_prefix>-<project_name>-vm."
-  type        = string
-  default     = null
-}
-
-variable "hostname_label" {
-  description = "Optional override for the VM DNS hostname label. When null, it is derived from name_prefix and project_name."
-  type        = string
-  default     = null
+variable "vms" {
+  description = "Map of VMs to create, keyed by short name. An empty object {} uses the global defaults; set any field to override it for that VM. Networking and the SSH keypair are shared across all VMs."
+  type = map(object({
+    display_name            = optional(string)
+    hostname_label          = optional(string)
+    instance_shape          = optional(string)
+    instance_ocpus          = optional(number)
+    instance_memory_in_gbs  = optional(number)
+    boot_volume_size_in_gbs = optional(number)
+    data_volume_size_in_gbs = optional(number)
+  }))
+  default = {
+    vm1 = {}
+    vm2 = {}
+    vm3 = {}
+  }
 
   validation {
-    condition     = var.hostname_label == null || can(regex("^[a-z][a-z0-9-]{1,14}$", var.hostname_label))
-    error_message = "hostname_label must be 2-15 characters, start with a lowercase letter, and contain only lowercase letters, numbers, and hyphens."
+    condition = alltrue([
+      for k, v in var.vms : v.hostname_label == null || can(regex("^[a-z][a-z0-9-]{1,14}$", v.hostname_label))
+    ])
+    error_message = "each vms hostname_label must be 2-15 characters, start with a lowercase letter, and contain only lowercase letters, numbers, and hyphens."
   }
 }
 

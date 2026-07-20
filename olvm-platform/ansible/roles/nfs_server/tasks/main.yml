@@ -1,0 +1,28 @@
+---
+# Configure an Oracle Linux 9 host as an NFS server whose export is used as an
+# OLVM storage domain. Steps: prepare the data disk, install/enable NFS, publish
+# the export, and open the firewall.
+
+- name: "Step 01 - Prepare and mount the data volume"
+  ansible.builtin.import_tasks: 01_storage.yml
+  tags:
+    - step01
+    - storage
+
+- name: "Step 02 - Install and enable the NFS server"
+  ansible.builtin.import_tasks: 02_nfs.yml
+  tags:
+    - step02
+    - nfs
+
+- name: "Step 03 - Configure firewalld for NFS and the internal network"
+  ansible.builtin.import_tasks: 03_firewall.yml
+  tags:
+    - step03
+    - firewall
+
+- name: "Step 04 - Print the NFS readiness summary"
+  ansible.builtin.import_tasks: 04_summary.yml
+  tags:
+    - step04
+    - summary

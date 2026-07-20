@@ -1,0 +1,35 @@
+# Copy this file to inventory/hosts.yml and set each ansible_host to the public IP
+# printed by Terraform. From ../terraform run:
+#
+#   terraform output ansible_inventory_hint
+#   terraform output -raw engine_public_ip
+#   terraform output kvm_host_public_ips
+#   terraform output -raw nfs_public_ip
+#   terraform output -raw nfs_private_ip     # KVM hosts mount the export from here
+#
+# The three groups map to the roles provisioned by the Terraform stack:
+#   engine      -> OLVM 4.5 Engine (Oracle Linux 8)   -> role olvm_engine
+#   kvm_hosts   -> OLVM KVM hosts (Oracle Linux 9.6+)  -> role olvm_host_prep
+#   nfs_server  -> NFS storage server (Oracle Linux 9) -> role nfs_server
+---
+engine:
+  hosts:
+    olvm-engine:
+      ansible_host: 203.0.113.10
+
+kvm_hosts:
+  hosts:
+    olvm-kvm-01:
+      ansible_host: 203.0.113.21
+      target_hostname: olvm-kvm-01.lab.local
+    olvm-kvm-02:
+      ansible_host: 203.0.113.22
+      target_hostname: olvm-kvm-02.lab.local
+
+nfs_server:
+  hosts:
+    olvm-nfs-01:
+      ansible_host: 203.0.113.30
+      # Private IP of this NFS server (terraform output -raw nfs_private_ip).
+      # KVM hosts and the Engine reach the export over this address.
+      nfs_server_address: 10.0.1.30

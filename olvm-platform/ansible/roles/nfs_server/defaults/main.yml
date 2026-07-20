@@ -1,0 +1,37 @@
+---
+# Authoritative defaults for the nfs_server role. Overridden by
+# inventory/group_vars/nfs_server.yml when running the full playbook.
+
+# Directory exported over NFS and later added as an OLVM storage domain.
+nfs_export_path: /exports/olvm
+
+# Block device to format and mount. Empty => auto-detect the extra data volume
+# attached by Terraform (first unpartitioned, non-boot disk; typically /dev/sdb).
+nfs_data_device: ""
+
+# Filesystem for the data volume.
+nfs_filesystem: xfs
+
+# Clients allowed to mount the export (defaults to the whole VCN).
+nfs_allowed_clients: "{{ internal_network_cidr | default('10.0.0.0/16') }}"
+
+# Export options. no_root_squash is required by OLVM storage domains.
+nfs_export_options: "rw,sync,no_root_squash,no_subtree_check"
+
+# OLVM storage domains require the export owned by the vdsm:kvm uid:gid (36:36).
+nfs_owner_uid: 36
+nfs_owner_gid: 36
+
+# CIDR trusted for all inbound traffic when firewalld is active. Set in
+# group_vars/all.yml; defaulted here so a --tags run still works.
+internal_network_cidr: "10.0.0.0/16"
+
+# NFSv4/v3 service ports opened in firewalld (in addition to trusting the whole
+# internal network). rpc-bind (111), nfs (2049), mountd (20048).
+nfs_firewall_ports:
+  - { port: 2049, proto: tcp }
+  - { port: 2049, proto: udp }
+  - { port: 111, proto: tcp }
+  - { port: 111, proto: udp }
+  - { port: 20048, proto: tcp }
+  - { port: 20048, proto: udp }

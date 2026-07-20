@@ -1,0 +1,59 @@
+---
+# 05 - Open the OLVM ports in local firewalld when it is active, and trust all
+# machine-to-machine traffic coming from inside the VCN so the Engine, the other
+# KVM host, and the NFS server can reach every internal service. The Terraform
+# security list also allows intra-VCN traffic; this makes the host self-contained
+# even if that rule is disabled.
+
+- name: Check whether firewalld is active
+  ansible.builtin.command: firewall-cmd --state
+  register: olvm_firewalld_state
+  changed_when: false
+  failed_when: false
+
+- name: Set a fact for firewalld being active
+  ansible.builtin.set_fact:
+    olvm_firewalld_active: "{{ olvm_firewalld_state.rc == 0 and 'running' in olvm_firewalld_state.stdout }}"
+
+- name: Open the OLVM ports in firewalld
+  ansible.posix.firewalld:
+    port: "{{ item.port }}/{{ item.proto }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  loop: "{{ firewall_ports }}"
+  loop_control:
+    label: "{{ item.port }}/{{ item.proto }}"
+  when: olvm_firewalld_active | bool
+  notify: Reload firewalld
+
+- name: Trust all traffic from inside the VCN (machine-to-machine communication)
+  ansible.posix.firewalld:
+    source: "{{ internal_network_cidr }}"
+    zone: trusted
+    permanent: true
+    immediate: true
+    state: enabled
+  when: olvm_firewalld_active | bool
+  notify: Reload firewalld
+
+- name: Report that firewalld is inactive (nothing opened locally)
+  ansible.builtin.debug:
+    msg: >-
+      firewalld is not active on this host; no local port rules were applied.
+      Machine-to-machine traffic relies on the Terraform intra-VCN security-list
+      rule instead.
+  when: not (olvm_firewalld_active | bool)
+
+- name: Record the firewall result for the final summary
+  ansible.builtin.set_fact:
+    olvm_summary_ports: >-
+      {{ firewall_ports
+         | map(attribute='port')
+         | zip(firewall_ports | map(attribute='proto'))
+         | map('join', '/')
+         | list }}
+    olvm_summary_firewall: >-
+      {{ 'opened in local firewalld + trusted ' ~ internal_network_cidr
+         if olvm_firewalld_active | bool
+         else 'firewalld inactive - rely on the Terraform intra-VCN rule' }}

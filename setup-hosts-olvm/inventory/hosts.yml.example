@@ -1,0 +1,15 @@
+# Copy this file to inventory/hosts.yml and set ansible_host to the KVM host's
+# reachable IP (the Engine reaches the host over its private IP, but this is the
+# address YOU connect to from where the playbook runs).
+#
+# Set target_hostname per host to the fully qualified name the host should carry
+# in the OLVM inventory. engine_ssh_public_key is REQUIRED and normally lives in
+# group_vars/kvm_hosts.yml so it is shared across hosts.
+---
+kvm_hosts:
+  hosts:
+    olvm-kvm-01:
+      # Replace with the reachable IP of the freshly provisioned OL 9.6+ host.
+      ansible_host: 203.0.113.20
+      # Fully qualified hostname to assign to this host (required).
+      target_hostname: olvm-kvm-01.lab.local

@@ -1,0 +1,8 @@
+---
+# Shared across every host in the platform.
+
+# The VCN CIDR. Used by the host firewalls to trust all machine-to-machine
+# traffic coming from inside the VCN (the internal OLVM/libvirt/migration/NFS
+# ports) and by the NFS server to scope its export. Must match vcn_cidr_block in
+# ../terraform.
+internal_network_cidr: "10.0.0.0/16"

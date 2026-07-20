@@ -1,0 +1,35 @@
+---
+# End-to-end OLVM platform configuration. Run after the Terraform stack is up and
+# the inventory is populated with the provisioned IPs.
+#
+# Order matters:
+#   1. NFS storage server  - so the storage domain exists to add later.
+#   2. OLVM Engine         - installs the Manager (engine-setup).
+#   3. KVM hosts           - prepped for "Add Host" (needs the Engine's SSH key;
+#                            see group_vars/kvm_hosts.yml -> engine_ssh_public_key).
+#
+# Run everything:      ansible-playbook site.yml
+# Run one tier:        ansible-playbook site.yml --limit nfs_server
+#                      ansible-playbook site.yml --limit engine
+#                      ansible-playbook site.yml --limit kvm_hosts
+
+- name: Prepare the NFS storage server
+  hosts: nfs_server
+  become: true
+  gather_facts: true
+  roles:
+    - nfs_server
+
+- name: Install and configure the OLVM 4.5 Engine
+  hosts: engine
+  become: true
+  gather_facts: true
+  roles:
+    - olvm_engine
+
+- name: Prepare the Oracle Linux 9.6+ KVM hosts for OLVM
+  hosts: kvm_hosts
+  become: true
+  gather_facts: true
+  roles:
+    - olvm_host_prep

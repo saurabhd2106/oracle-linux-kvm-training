@@ -1,0 +1,5 @@
+# Local inventory holds the environment-specific host IP; keep only the example.
+inventory/hosts.yml
+
+# Ansible artifacts
+*.retry

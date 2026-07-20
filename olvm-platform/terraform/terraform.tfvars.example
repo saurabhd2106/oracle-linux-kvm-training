@@ -1,0 +1,74 @@
+# Copy this file to terraform.tfvars and fill in your OCI credentials.
+#   cp terraform.tfvars.example terraform.tfvars
+
+# --- OCI provider authentication --------------------------------------------
+tenancy_ocid     = "ocid1.tenancy.oc1..aaaa..."
+user_ocid        = "ocid1.user.oc1..aaaa..."
+fingerprint      = "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99"
+private_key_path = "~/.oci/oci_api_key.pem"
+region           = "ap-sydney-1"
+compartment_ocid = "ocid1.compartment.oc1..aaaa..."
+
+# --- Naming ------------------------------------------------------------------
+# name_prefix keeps resource names unique per person in a shared tenancy.
+name_prefix  = "sau"
+project_name = "olvm-platform"
+
+# --- Topology: 1 OLVM Engine (OL8) + 2 KVM hosts (OL9) + 1 NFS server (OL9) --
+# The role drives the grouped Terraform outputs used to build the Ansible
+# inventory. The Engine must run Oracle Linux 8; the KVM hosts and NFS server
+# run Oracle Linux 9. Only the NFS server gets a data volume by default.
+vms = {
+  engine = {
+    role                    = "engine"
+    oracle_linux_version    = "8"
+    instance_ocpus          = 4
+    instance_memory_in_gbs  = 16
+    boot_volume_size_in_gbs = 100
+  }
+  kvm1 = {
+    role                   = "kvm_host"
+    oracle_linux_version   = "9"
+    instance_ocpus         = 4
+    instance_memory_in_gbs = 16
+  }
+  kvm2 = {
+    role                   = "kvm_host"
+    oracle_linux_version   = "9"
+    instance_ocpus         = 4
+    instance_memory_in_gbs = 16
+  }
+  nfs = {
+    role                    = "nfs"
+    oracle_linux_version    = "9"
+    instance_ocpus          = 2
+    instance_memory_in_gbs  = 8
+    data_volume_size_in_gbs = 200
+  }
+}
+
+# --- Shape defaults (applied to any VM that does not override them) ----------
+instance_shape         = "VM.Standard.E5.Flex"
+instance_ocpus         = 4
+instance_memory_in_gbs = 16
+boot_volume_size_in_gbs = 100
+
+# --- Networking --------------------------------------------------------------
+vcn_cidr_block           = "10.0.0.0/16"
+public_subnet_cidr_block = "10.0.1.0/24"
+
+# External access. Restrict ssh_allowed_cidr to your IP/CIDR for anything beyond
+# a throwaway lab. These ports are the ones reachable from the internet.
+ssh_allowed_cidr            = "0.0.0.0/0"
+allowed_ingress_ports       = [22, 80, 443]
+allowed_ingress_port_ranges = [{ min = 5900, max = 6923 }]
+
+# Internal machine-to-machine traffic: allow all ports between hosts inside the
+# VCN so the Engine, KVM hosts, and NFS server can communicate freely. Set to
+# false to rely solely on per-host firewalld rules configured by Ansible.
+allow_all_intra_vcn = true
+
+freeform_tags = {
+  managed-by = "terraform"
+  project    = "olvm-platform"
+}

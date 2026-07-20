@@ -1,0 +1,63 @@
+---
+# 03 - Open the NFS ports in firewalld and trust all traffic from inside the VCN
+# so the Engine and both KVM hosts can mount the export. The Terraform security
+# list also allows intra-VCN traffic; this keeps the host self-contained.
+
+- name: Check whether firewalld is active
+  ansible.builtin.command: firewall-cmd --state
+  register: nfs_firewalld_state
+  changed_when: false
+  failed_when: false
+
+- name: Set a fact for firewalld being active
+  ansible.builtin.set_fact:
+    nfs_firewalld_active: "{{ nfs_firewalld_state.rc == 0 and 'running' in nfs_firewalld_state.stdout }}"
+
+- name: Open the NFS service in firewalld
+  ansible.posix.firewalld:
+    service: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  loop:
+    - nfs
+    - rpc-bind
+    - mountd
+  when: nfs_firewalld_active | bool
+  notify: Reload firewalld
+
+- name: Open the NFS ports in firewalld
+  ansible.posix.firewalld:
+    port: "{{ item.port }}/{{ item.proto }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  loop: "{{ nfs_firewall_ports }}"
+  loop_control:
+    label: "{{ item.port }}/{{ item.proto }}"
+  when: nfs_firewalld_active | bool
+  notify: Reload firewalld
+
+- name: Trust all traffic from inside the VCN (machine-to-machine communication)
+  ansible.posix.firewalld:
+    source: "{{ internal_network_cidr }}"
+    zone: trusted
+    permanent: true
+    immediate: true
+    state: enabled
+  when: nfs_firewalld_active | bool
+  notify: Reload firewalld
+
+- name: Report that firewalld is inactive (nothing opened locally)
+  ansible.builtin.debug:
+    msg: >-
+      firewalld is not active on this host; no local port rules were applied.
+      NFS access relies on the Terraform intra-VCN security-list rule instead.
+  when: not (nfs_firewalld_active | bool)
+
+- name: Record the firewall result for the final summary
+  ansible.builtin.set_fact:
+    nfs_summary_firewall: >-
+      {{ 'NFS ports opened + trusted ' ~ internal_network_cidr
+         if nfs_firewalld_active | bool
+         else 'firewalld inactive - rely on the Terraform intra-VCN rule' }}

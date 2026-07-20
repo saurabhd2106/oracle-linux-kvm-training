@@ -1,0 +1,30 @@
+---
+# 07 - One scannable summary a trainer/admin reads to decide whether it is safe
+# to go run "Add Host" in the OLVM Administration Portal next.
+
+- name: Print the OLVM host readiness summary
+  ansible.builtin.debug:
+    msg:
+      - "==================== OLVM HOST PREP SUMMARY ===================="
+      - "Host              : {{ target_hostname }} ({{ ansible_facts['default_ipv4']['address'] | default('n/a') }})"
+      - "OS                : {{ olvm_summary_os | default('not validated') }}"
+      - "Hostname / DNS    : {{ olvm_summary_dns | default('not set') }}"
+      - "Virtualization    : {{ olvm_summary_virt | default('not verified') }}"
+      - "Release package   : {{ olvm_release_package }}"
+      - "Repos enabled     : {{ olvm_required_repos | join(', ') }}"
+      - "Repos disabled    : {{ (olvm_summary_repos_disabled | default([])) | join(', ') | default('none', true) }}"
+      - "Pre-check         : {{ olvm_summary_precheck | default('not run') }}"
+      - "Pre-check WARNs   : {{ (olvm_summary_precheck_warns | default([])) | length }} (listed below if any)"
+      - "Firewall (local)  : {{ olvm_summary_firewall | default('not configured') }}"
+      - "Ports             : {{ (olvm_summary_ports | default([])) | join(', ') }}"
+      - "SSH authorization : {{ olvm_summary_ssh | default('not configured') }}"
+      - "==============================================================="
+      - "NEXT: ensure the cloud security list allows the ports above (Terraform,"
+      - "      managed separately), then run 'Add Host' in the OLVM Admin Portal."
+      - "==============================================================="
+
+- name: List the pre-check warnings (informational, not fatal)
+  ansible.builtin.debug:
+    msg: "PRE-CHECK WARN: {{ item }}"
+  loop: "{{ olvm_summary_precheck_warns | default([]) }}"
+  when: (olvm_summary_precheck_warns | default([])) | length > 0

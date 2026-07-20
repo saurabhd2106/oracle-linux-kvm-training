@@ -1,0 +1,59 @@
+---
+# 01 - Confirm this is Oracle Linux 9.6+ and that it is a clean host with no
+# pre-existing general KVM/libvirt stack. A dirty host is the single most common
+# cause of "Add Host" failing later, so we fail loudly here rather than proceed.
+
+- name: Read /etc/oracle-release
+  ansible.builtin.slurp:
+    src: /etc/oracle-release
+  register: olvm_oracle_release
+  failed_when: false
+
+- name: Assert the host runs Oracle Linux 9.6 or later
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'OracleLinux'
+      - ansible_facts['distribution_version'] is version(olvm_min_ol_version, '>=')
+    fail_msg: >-
+      This host must run Oracle Linux {{ olvm_min_ol_version }} or later.
+      Detected: {{ ansible_facts['distribution'] }}
+      {{ ansible_facts['distribution_version'] }}
+      ({{ (olvm_oracle_release.content | b64decode | trim)
+          if olvm_oracle_release.content is defined
+          else '/etc/oracle-release not found' }}).
+    success_msg: >-
+      Host is Oracle Linux {{ ansible_facts['distribution_version'] }}
+      (>= {{ olvm_min_ol_version }}).
+    quiet: true
+
+- name: Gather the list of installed packages
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Determine which conflicting KVM/libvirt packages are already installed
+  ansible.builtin.set_fact:
+    olvm_preinstalled_conflicts: >-
+      {{ olvm_conflicting_packages
+         | select('in', ansible_facts.packages)
+         | list }}
+
+- name: Fail loudly if a general KVM/libvirt stack is already installed
+  ansible.builtin.assert:
+    that:
+      - olvm_preinstalled_conflicts | length == 0
+    fail_msg: >-
+      A general virtualization stack is already installed on this host
+      ({{ olvm_preinstalled_conflicts | join(', ') }}). OLVM installs its own
+      version-pinned vdsm/libvirt/qemu-kvm stack when the host is added through
+      the Administration Portal; pre-existing packages cause unresolvable
+      dependency conflicts (e.g. libvirt-lock-sanlock version mismatches) that
+      are very hard to undo on a shared host. Use a freshly provisioned host, or
+      remove these packages, before continuing.
+    success_msg: "No pre-existing KVM/libvirt stack detected - host is clean."
+    quiet: true
+
+- name: Record the OS validation result for the final summary
+  ansible.builtin.set_fact:
+    olvm_summary_os: >-
+      Oracle Linux {{ ansible_facts['distribution_version'] }}
+      (>= {{ olvm_min_ol_version }}), no pre-existing KVM/libvirt stack.

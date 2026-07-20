@@ -39,6 +39,8 @@ resource "oci_core_security_list" "public" {
   vcn_id         = oci_core_vcn.main.id
   display_name   = "${local.name_base}-public-sl"
 
+  # External access from ssh_allowed_cidr: individual TCP ports (SSH 22, OLVM web
+  # portals 80/443).
   dynamic "ingress_security_rules" {
     for_each = toset(var.allowed_ingress_ports)
     content {
@@ -54,6 +56,8 @@ resource "oci_core_security_list" "public" {
     }
   }
 
+  # External access from ssh_allowed_cidr: TCP port ranges (OLVM console
+  # VNC/SPICE proxy range 5900-6923).
   dynamic "ingress_security_rules" {
     for_each = var.allowed_ingress_port_ranges
     content {
@@ -66,6 +70,21 @@ resource "oci_core_security_list" "public" {
         min = ingress_security_rules.value.min
         max = ingress_security_rules.value.max
       }
+    }
+  }
+
+  # Internal machine-to-machine traffic: allow ALL protocols/ports between hosts
+  # inside the VCN. This is what enables the Engine, KVM hosts, and NFS server to
+  # communicate over every port they need (vdsm 54321/54322, libvirt 16509/16514,
+  # live migration 49152-49216, console 5900-6923, NFS 2049/111/20048, SSH, etc.)
+  # without enumerating each one at the cloud layer.
+  dynamic "ingress_security_rules" {
+    for_each = var.allow_all_intra_vcn ? [1] : []
+    content {
+      description = "Allow all traffic between machines inside the VCN"
+      protocol    = "all"
+      source      = var.vcn_cidr_block
+      source_type = "CIDR_BLOCK"
     }
   }
 
