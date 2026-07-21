@@ -1,0 +1,90 @@
+---
+# Configure the OLVM objects (Data Center, Cluster, Hosts, NFS storage domain)
+# through the Engine REST API using the ovirt.ovirt collection. This runs on the
+# controller (connection: local) after the nfs_server, engine and kvm_hosts
+# plays, and replaces the manual Admin Portal steps.
+#
+# The whole flow is wrapped so the API token is always revoked, even on failure.
+
+- name: Validate the inputs needed to reach the API and add the hosts/domain
+  ansible.builtin.assert:
+    that:
+      - olvm_admin_password is defined
+      - olvm_admin_password | length > 0
+      - groups['kvm_hosts'] | default([]) | length > 0
+      - olvm_storage_domain_nfs_address | length > 0
+    fail_msg: >-
+      olvm_config needs olvm_admin_password (vaulted, from group_vars/engine),
+      at least one host in the kvm_hosts group, and an NFS address
+      (nfs_server_address on the nfs_server host). One of these is missing.
+    success_msg: "olvm_config inputs look valid."
+    quiet: true
+  tags:
+    - always
+
+- name: Configure OLVM via the Engine API
+  block:
+    - name: "Step 01 - Authenticate to the Engine API"
+      ansible.builtin.import_tasks: 01_auth.yml
+      tags:
+        - step01
+        - auth
+
+    - name: "Step 02 - Ensure the Data Center exists"
+      ansible.builtin.import_tasks: 02_datacenter.yml
+      tags:
+        - step02
+        - datacenter
+
+    - name: "Step 03 - Ensure the Cluster exists"
+      ansible.builtin.import_tasks: 03_cluster.yml
+      tags:
+        - step03
+        - cluster
+
+    - name: "Step 04 - Add the KVM hosts and wait until Up"
+      ansible.builtin.import_tasks: 04_hosts.yml
+      tags:
+        - step04
+        - hosts
+
+    - name: "Step 05 - Attach the NFS storage domain"
+      ansible.builtin.import_tasks: 05_storage_domain.yml
+      tags:
+        - step05
+        - storage
+
+    - name: "Step 07 - Ensure the logical networks exist"
+      ansible.builtin.import_tasks: 07_networks.yml
+      tags:
+        - step07
+        - networks
+
+    - name: "Step 08 - Ensure the vNIC profiles exist"
+      ansible.builtin.import_tasks: 08_vnic_profiles.yml
+      tags:
+        - step08
+        - vnic
+        - networks
+
+    - name: "Step 09 - Attach the networks to the KVM hosts (opt-in)"
+      ansible.builtin.import_tasks: 09_host_networks.yml
+      tags:
+        - step09
+        - host_networks
+        - networks
+
+    - name: "Step 06 - Print the configuration summary"
+      ansible.builtin.import_tasks: 06_summary.yml
+      tags:
+        - step06
+        - summary
+  always:
+    - name: Revoke the Engine API token
+      ovirt.ovirt.ovirt_auth:
+        state: absent
+        ovirt_auth: "{{ olvm_api_auth | default(omit) }}"
+      when: olvm_api_auth is defined and (olvm_api_auth.token | default('')) | length > 0
+      no_log: true
+      tags:
+        - always

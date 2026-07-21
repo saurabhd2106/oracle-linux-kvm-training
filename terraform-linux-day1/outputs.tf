@@ -34,3 +34,12 @@ output "data_volume_ocids" {
   description = "Map of VM name to the OCID of its attached data block volume, for reference."
   value       = { for k, v in oci_core_volume.data : k => v.id }
 }
+
+output "secondary_vnic_info" {
+  description = "Map of VM key to its secondary VNIC details (for the KVM bridged-guest labs). The scripts read these live from IMDS; this output is for reference."
+  value = { for k, v in data.oci_core_vnic.kvm_guest : k => {
+    vnic_ocid  = v.id
+    mac        = v.mac_address
+    private_ip = v.private_ip_address
+  } }
+}

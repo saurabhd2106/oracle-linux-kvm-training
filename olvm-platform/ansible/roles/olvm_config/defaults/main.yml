@@ -1,0 +1,119 @@
+---
+# Authoritative defaults for the olvm_config role. This role runs locally on the
+# controller (connection: local) and talks to the OLVM/oVirt Engine REST API to
+# create the Data Center, Cluster, add the KVM hosts, and attach the NFS export
+# as a storage domain - replacing the manual Admin Portal steps.
+
+# --- API connection ---------------------------------------------------------
+# The Engine REST API endpoint. Built from the engine host's public IP so it is
+# reachable from the controller without depending on FQDN resolution. The cert
+# CN is the FQDN, so olvm_api_insecure skips verification for the lab.
+olvm_api_url: "https://{{ ansible_host }}/ovirt-engine/api"
+
+# Admin login. This build enables Keycloak (olvm_configure_keycloak: true). The
+# Admin Portal uses "admin@ovirt", but the REST API/SDK requires the FULL
+# username *with the profile suffix*: admin@ovirt@internalsso. Using "admin@ovirt"
+# here fails with "No valid profile found in credentials". If Keycloak was
+# declined during engine-setup (legacy AAA), use admin@internal instead.
+olvm_api_username: admin@ovirt@internalsso
+
+# Skip TLS verification (lab). For production, set to false and point
+# olvm_api_ca_file at the Engine CA instead.
+olvm_api_insecure: true
+olvm_api_ca_file: ""
+
+# --- Data Center ------------------------------------------------------------
+# Dedicated lab DC name (lowercase/hyphenated, purpose-scoped). On the first run
+# the role renames the built-in DC (olvm_datacenter_source_name) to this; on
+# later runs it is a plain idempotent ensure-present.
+olvm_datacenter_name: olvm-lab-dc
+# Built-in DC name to rename FROM on first run (engine-setup creates "Default").
+olvm_datacenter_source_name: Default
+olvm_datacenter_local: false
+olvm_datacenter_description: "Managed by olvm_config"
+
+# --- Cluster ----------------------------------------------------------------
+olvm_cluster_name: olvm-lab-cluster
+# Built-in cluster name to rename FROM on first run.
+olvm_cluster_source_name: Default
+olvm_cluster_description: "Managed by olvm_config"
+# Leave empty to let the Engine derive the CPU type. Set an explicit value (for
+# example a Secure Intel/AMD family) if cluster creation needs it on OCI CPUs.
+olvm_cluster_cpu_type: ""
+
+# --- Hosts ------------------------------------------------------------------
+# Hosts are added by reusing the Engine SSH key already authorized on each KVM
+# host by olvm_host_prep (public_key: true). Wait up to this long for each host
+# to reach the Up state (deploying vdsm can take several minutes).
+olvm_host_timeout: 900
+olvm_host_poll_interval: 20
+
+# --- Storage domain ---------------------------------------------------------
+olvm_storage_domain_name: olvm-data
+olvm_storage_domain_path: "{{ nfs_export_path | default('/exports/olvm') }}"
+# NFS server private IP the Engine/hosts mount from. Defaults to the
+# nfs_server_address defined on the nfs_server inventory host.
+olvm_storage_domain_nfs_address: >-
+  {{ hostvars[groups['nfs_server'][0]].nfs_server_address
+     if (groups['nfs_server'] | default([]) | length > 0)
+     else '' }}
+
+# --- Networks (best-practice logical network segregation) -------------------
+# Logical networks created in the Data Center, with their roles assigned at the
+# cluster level. The built-in "ovirtmgmt" network (created by engine-setup) is
+# left untouched as the management + display network - do not rename or remove
+# it, the Engine depends on it. These defaults add a dedicated VM network and a
+# dedicated live-migration network so migration traffic does not saturate the
+# management network (an oVirt/OLVM best practice).
+#
+# Per network:
+#   name        - logical network name (created in olvm_datacenter_name).
+#   description - free text.
+#   vlan_tag    - integer to isolate the network on a tagged VLAN, or null for a
+#                 plain untagged network. Flat cloud networks (such as a default
+#                 OCI subnet) often do NOT pass guest VLAN tags; use null there.
+#   vm_network  - true for networks that carry VM traffic (a host bridge is
+#                 created), false for infrastructure-only networks (migration).
+#   migration   - true to grant the cluster migration role (only one network per
+#                 cluster should have it).
+#   display     - true to grant the cluster display (console) role.
+#   required    - true if the network must stay operational on every host. Kept
+#                 false so a host is not marked non-operational before the
+#                 network is attached to it.
+olvm_networks:
+  - name: olvm-vm
+    description: "VM traffic"
+    vlan_tag: 100
+    vm_network: true
+    migration: false
+    display: false
+    required: false
+  - name: olvm-migration
+    description: "Dedicated live-migration traffic"
+    vlan_tag: 200
+    vm_network: false
+    migration: true
+    display: false
+    required: false
+
+# vNIC profiles to ensure on the VM networks. Guest NICs attach to a vNIC
+# profile, not directly to a network. Creating a VM network already yields a
+# same-name profile; declaring it here makes it explicit and idempotent, and is
+# the profile name the scripts/create-vm.yml helper attaches guest NICs to.
+olvm_vnic_profiles:
+  - name: olvm-vm
+    network: olvm-vm
+
+# Attaching the non-management networks to a physical host NIC is opt-in. On a
+# single-NIC OCI lab an untested VLAN attachment can disrupt host connectivity,
+# and the logical networks + cluster roles above are created regardless of this
+# toggle. Enable it once you have confirmed the NIC name and (for the migration
+# network to actually carry traffic) allocated host IPs on that network.
+olvm_configure_host_networks: false
+# Physical interface on each KVM host to attach the networks to.
+olvm_host_network_interface: ens3
+# Networks (by name, optionally with boot_protocol/address/netmask/gateway) to
+# attach to the interface above when olvm_configure_host_networks is true.
+olvm_host_attached_networks:
+  - name: olvm-vm
+  - name: olvm-migration

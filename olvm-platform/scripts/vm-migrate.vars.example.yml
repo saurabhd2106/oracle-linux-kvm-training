@@ -1,0 +1,18 @@
+---
+# Example variables file for vm-migrate.yml. Copy or edit, then pass it with:
+#
+#   cd olvm-platform/ansible
+#   ansible-playbook ../scripts/vm-migrate.yml -e @../scripts/vm-migrate.vars.example.yml
+#
+# vm_name is required.
+
+# --- Required ----------------------------------------------------------------
+# VM to live-migrate (must be Up).
+vm_name: lab-vm-01
+
+# --- Optional overrides (defaults shown) -------------------------------------
+# Destination host (OLVM host name, e.g. olvm-kvm-02). Empty = Engine chooses.
+# migrate_to_host: ""
+
+# Force migration even when the VM is pinned / flagged non-migratable.
+# migrate_force: false

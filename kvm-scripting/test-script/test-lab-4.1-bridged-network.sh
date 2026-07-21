@@ -142,6 +142,21 @@ vm_ssh() {
     return 1
 }
 
+# Like vm_ssh, but retries for a while so cloud-init has time to inject the key
+# and bring sshd up before we judge the result.
+# $1=addr  $2=cmd  $3=tries (default 24, i.e. up to ~2 min at 5s each)
+vm_ssh_retry() {
+    local addr="$1" cmd="$2" tries="${3:-24}" i out
+    for ((i = 0; i < tries; i++)); do
+        if out="$(vm_ssh "$addr" "$cmd")"; then
+            printf '%s' "$out"
+            return 0
+        fi
+        sleep 5
+    done
+    return 1
+}
+
 # Wait for the VM to acquire an address on the given libvirt lease source.
 # $1 = source ("lease" or "arp"); prints the first IPv4 found, or nothing.
 wait_for_vm_addr() {
@@ -279,11 +294,12 @@ EOF
     local addr
     if addr="$(wait_for_vm_addr lease 36)"; then
         info "VM address (NAT): $addr"
+        info "Waiting for cloud-init to finish and inject the SSH key"
         local out
-        if out="$(vm_ssh "$addr" 'echo ok')" && [[ "$out" == "ok" ]]; then
+        if out="$(vm_ssh_retry "$addr" 'echo ok')" && [[ "$out" == "ok" ]]; then
             pass "Step 0: $VM_NAME reachable over SSH (echo ok)"
         else
-            fail "Step 0: SSH to $VM_NAME did not return 'ok'"
+            fail "Step 0: SSH to $VM_NAME did not return 'ok' (checked users: ${SSH_USERS[*]})"
         fi
     else
         fail "Step 0: VM did not obtain a NAT lease in time (cloud-init may still be running)"
@@ -559,7 +575,7 @@ step5_verify_connectivity() {
         fi
 
         local out
-        if out="$(vm_ssh "$addr" 'ip addr show')" && [[ -n "$out" ]]; then
+        if out="$(vm_ssh_retry "$addr" 'ip addr show' 12)" && [[ -n "$out" ]]; then
             pass "Step 5: SSH into VM on the bridged network succeeded"
         else
             warn "Step 5: could not SSH into VM at $addr (it may still be booting)"

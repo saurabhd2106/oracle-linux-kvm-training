@@ -1,0 +1,17 @@
+---
+# 08 - Ensure vNIC profiles exist on the VM networks. Guest NICs attach to a
+# vNIC profile rather than directly to a logical network. Creating a VM network
+# already yields a same-name profile; declaring it explicitly here keeps it
+# idempotent and gives scripts/create-vm.yml a stable profile name to attach to.
+
+- name: "Ensure vNIC profiles on the VM networks"
+  ovirt.ovirt.ovirt_vnic_profile:
+    auth: "{{ olvm_api_auth }}"
+    name: "{{ item.name }}"
+    network: "{{ item.network }}"
+    data_center: "{{ olvm_datacenter_name }}"
+    state: present
+  loop: "{{ olvm_vnic_profiles }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.network }})"
+  register: olvm_vnic_profile_results

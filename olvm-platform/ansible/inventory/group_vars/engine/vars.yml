@@ -45,3 +45,5 @@ olvm_configure_ovn: true
 
 olvm_engine_service: ovirt-engine
 olvm_firewall_service: firewalld
+
+ansible_python_interpreter: /usr/bin/python3.9

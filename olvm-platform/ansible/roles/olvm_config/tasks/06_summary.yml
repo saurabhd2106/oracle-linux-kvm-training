@@ -1,0 +1,20 @@
+---
+# 06 - One scannable summary of what was configured through the Engine API.
+
+- name: Print the OLVM configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "==================== OLVM CONFIG SUMMARY ===================="
+      - "Engine API        : {{ olvm_api_url }} (user {{ olvm_api_username }})"
+      - "Data Center       : {{ olvm_datacenter_name }} ({{ 'created/changed' if (olvm_datacenter_result is changed) else 'already present' }})"
+      - "Cluster           : {{ olvm_cluster_name }} ({{ 'created/changed' if (olvm_cluster_result is changed) else 'already present' }})"
+      - "Hosts added       : {{ groups['kvm_hosts'] | join(', ') }}"
+      - "Storage domain    : {{ olvm_storage_domain_name }} -> {{ olvm_storage_domain_nfs_address }}:{{ olvm_storage_domain_path }} ({{ 'created/changed' if (olvm_storage_domain_result is changed) else 'already present' }})"
+      - "Logical networks  : {{ olvm_networks | map(attribute='name') | join(', ') }} (roles: migration -> {{ olvm_networks | selectattr('migration', 'defined') | selectattr('migration') | map(attribute='name') | join(', ') | default('ovirtmgmt', true) }})"
+      - "vNIC profiles     : {{ olvm_vnic_profiles | map(attribute='name') | join(', ') }}"
+      - "Host net attach   : {{ 'on -> ' + olvm_host_network_interface if (olvm_configure_host_networks | bool) else 'off (logical networks created, not attached to host NICs)' }}"
+      - "============================================================"
+      - "Verify in the Admin Portal: Compute > Data Centers / Clusters / Hosts,"
+      - "Storage > Domains (Up/Active), and Network > Networks for the logical"
+      - "networks and their cluster roles."
+      - "============================================================"

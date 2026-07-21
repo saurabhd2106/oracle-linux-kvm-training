@@ -20,13 +20,12 @@ project_name = "linux-day1"
 # data_volume_size_in_gbs). Add or remove entries to change the number of VMs.
 vms = {
   vm1 = {}
-  vm2 = {}
-  vm3 = {
-    instance_ocpus          = 2
-    instance_memory_in_gbs  = 8
-    data_volume_size_in_gbs = 100
-  }
 }
+
+# Attach an extra secondary VNIC to the listed VM keys for the KVM bridged-guest
+# labs (Lab 4.1 Option 1/2). The VNIC gives a KVM guest an OCI-recognized MAC/IP.
+# Leave commented (empty list) unless you are running those labs.
+# secondary_vnic_vms = ["vm1"]
 
 # Global defaults applied to any VM field left unset above.
 # VM.Standard.E5.Flex with 4 OCPUs and 16 GB memory.

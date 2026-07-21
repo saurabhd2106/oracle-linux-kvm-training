@@ -1,0 +1,21 @@
+---
+# 09 - Optionally attach the non-management logical networks to a physical NIC
+# on each KVM host. Opt-in (olvm_configure_host_networks) because on a
+# single-NIC OCI lab an untested VLAN attachment can disrupt host connectivity.
+# Networks are attached as declared in olvm_host_attached_networks (no host IP
+# by default); add boot_protocol/address there if you want the migration
+# network to actually carry traffic instead of falling back to ovirtmgmt.
+
+- name: "Attach logical networks to {{ olvm_host_network_interface }} on each KVM host"
+  ovirt.ovirt.ovirt_host_network:
+    auth: "{{ olvm_api_auth }}"
+    name: "{{ item }}"
+    interface: "{{ olvm_host_network_interface }}"
+    networks: "{{ olvm_host_attached_networks }}"
+    save: true
+    state: present
+  loop: "{{ groups['kvm_hosts'] }}"
+  loop_control:
+    label: "{{ item }} -> {{ olvm_host_network_interface }}"
+  when: olvm_configure_host_networks | bool
+  register: olvm_host_network_results

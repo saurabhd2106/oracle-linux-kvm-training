@@ -1,0 +1,143 @@
+---
+# Live-migrate an OLVM virtual machine between KVM hosts through the Engine REST
+# API (ovirt.ovirt.ovirt_vm with migrate: true) - the automated equivalent of
+# right-click > Migrate in the Admin Portal.
+#
+# Live migration requires:
+#   - at least two hosts Up in the cluster,
+#   - shared storage the VM's disks live on (the olvm-data NFS domain qualifies),
+#   - the VM powered on.
+# Migration traffic uses the cluster's migration-role network (olvm-migration if
+# it is attached to the hosts; otherwise oVirt falls back to ovirtmgmt).
+#
+# Runs on the controller (connection: local) and talks to the Engine API, same
+# pattern as create-vm.yml / the olvm_config role.
+#
+# Run from the ansible project:
+#
+#   cd olvm-platform/ansible
+#   # let the Engine pick the destination host
+#   ansible-playbook ../scripts/vm-migrate.yml -e vm_name=lab-vm-01
+#   # or target a specific host (inventory/OLVM name)
+#   ansible-playbook ../scripts/vm-migrate.yml -e vm_name=lab-vm-01 -e migrate_to_host=olvm-kvm-02
+
+- name: Live-migrate an OLVM VM via the Engine API
+  hosts: engine
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+    # --- API connection (mirrors roles/olvm_config/defaults/main.yml) --------
+    olvm_api_url: "https://{{ ansible_host }}/ovirt-engine/api"
+    olvm_api_username: admin@ovirt@internalsso
+    olvm_api_insecure: true
+    olvm_api_ca_file: ""
+
+    # --- Migration options (override with -e or a vars file) -----------------
+    # vm_name is REQUIRED.
+    # Destination host (OLVM host name). Empty = let the Engine choose.
+    migrate_to_host: ""
+    # Force migration even if the VM is pinned / non-migratable. Use with care.
+    migrate_force: false
+
+  tasks:
+    - name: Validate the required inputs
+      ansible.builtin.assert:
+        that:
+          - vm_name is defined
+          - vm_name | length > 0
+          - olvm_admin_password is defined
+          - olvm_admin_password | length > 0
+        fail_msg: >-
+          vm-migrate.yml needs vm_name (pass with -e vm_name=... or a vars file)
+          and the vaulted olvm_admin_password (auto-loaded from
+          group_vars/engine).
+        success_msg: "Migration inputs look valid."
+        quiet: true
+
+    - name: Migrate the VM via the Engine API
+      block:
+        - name: Obtain an OLVM Engine API token
+          ovirt.ovirt.ovirt_auth:
+            url: "{{ olvm_api_url }}"
+            username: "{{ olvm_api_username }}"
+            password: "{{ olvm_admin_password }}"
+            insecure: "{{ olvm_api_insecure | bool }}"
+            ca_file: "{{ olvm_api_ca_file if (olvm_api_ca_file | length > 0) else omit }}"
+          register: olvm_auth_login
+          no_log: true
+
+        - name: Store the API session as an explicit variable
+          ansible.builtin.set_fact:
+            olvm_api_auth: "{{ olvm_auth_login.ansible_facts.ovirt_auth }}"
+          no_log: true
+
+        - name: "Look up the VM {{ vm_name }}"
+          ovirt.ovirt.ovirt_vm_info:
+            auth: "{{ olvm_api_auth }}"
+            pattern: "name={{ vm_name }}"
+          register: olvm_vm_lookup
+
+        - name: Confirm the VM exists and is running before migrating
+          ansible.builtin.assert:
+            that:
+              - olvm_vm_lookup.ovirt_vms | default([]) | length > 0
+              - olvm_vm_lookup.ovirt_vms[0].status == 'up'
+            fail_msg: >-
+              {{ vm_name }} must exist and be Up to live-migrate (current status:
+              {{ (olvm_vm_lookup.ovirt_vms[0].status | default('not found')) }}).
+            success_msg: "{{ vm_name }} is Up on host id {{ olvm_vm_lookup.ovirt_vms[0].host.id | default('?') }}."
+            quiet: true
+
+        - name: Count hosts that are Up
+          ovirt.ovirt.ovirt_host_info:
+            auth: "{{ olvm_api_auth }}"
+            pattern: status=up
+          register: olvm_hosts_up
+
+        - name: Confirm there is a destination host available
+          ansible.builtin.assert:
+            that:
+              - olvm_hosts_up.ovirt_hosts | default([]) | length >= 2
+            fail_msg: >-
+              Live migration needs at least two hosts Up in the cluster; only
+              {{ olvm_hosts_up.ovirt_hosts | default([]) | length }} is Up.
+            quiet: true
+
+        - name: "Live-migrate {{ vm_name }}{{ ' to ' + migrate_to_host if (migrate_to_host | length > 0) else ' (Engine picks host)' }}"
+          ovirt.ovirt.ovirt_vm:
+            auth: "{{ olvm_api_auth }}"
+            name: "{{ vm_name }}"
+            state: running
+            migrate: true
+            force_migrate: "{{ migrate_force | bool }}"
+            host: "{{ migrate_to_host if (migrate_to_host | length > 0) else omit }}"
+          register: olvm_vm_migrate
+
+        - name: "Re-read the VM to confirm its host"
+          ovirt.ovirt.ovirt_vm_info:
+            auth: "{{ olvm_api_auth }}"
+            pattern: "name={{ vm_name }}"
+          register: olvm_vm_after
+
+        - name: Show the migration summary
+          ansible.builtin.debug:
+            msg:
+              - "=================== VM MIGRATION SUMMARY ==================="
+              - "VM               : {{ vm_name }}"
+              - "Requested target : {{ migrate_to_host if (migrate_to_host | length > 0) else '(Engine chose)' }}"
+              - "Now on host id    : {{ olvm_vm_after.ovirt_vms[0].host.id | default('unknown') }}"
+              - "Changed          : {{ olvm_vm_migrate is changed }}"
+              - "==========================================================="
+              - "Confirm the running host in Compute > Virtual Machines > {{ vm_name }}."
+              - "==========================================================="
+
+      always:
+        - name: Revoke the Engine API token
+          ovirt.ovirt.ovirt_auth:
+            state: absent
+            ovirt_auth: "{{ olvm_api_auth | default(omit) }}"
+          when: olvm_api_auth is defined and (olvm_api_auth.token | default('')) | length > 0
+          no_log: true

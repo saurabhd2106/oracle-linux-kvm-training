@@ -18,16 +18,16 @@
   tags:
     - always
 
-- name: Require the Engine SSH public key to be provided
+- name: Require an Engine SSH key source (explicit var, or the engine host to fetch from)
   ansible.builtin.assert:
     that:
-      - engine_ssh_public_key is defined
-      - engine_ssh_public_key | length > 0
+      - (engine_ssh_public_key | default('') | length > 0) or (groups['engine'] | default([]) | length > 0)
     fail_msg: >-
-      engine_ssh_public_key is not set. Provide the OLVM Engine's public key as a
-      string, or a path to a local file containing it, in
-      group_vars/kvm_hosts.yml (or with -e engine_ssh_public_key=...).
-    success_msg: "Engine SSH public key supplied."
+      No Engine SSH key source available. Either set engine_ssh_public_key (a key
+      string or path to a file) in group_vars/kvm_hosts.yml, or include the Engine
+      in the inventory 'engine' group so its key can be fetched automatically from
+      /etc/pki/ovirt-engine/keys/engine_id_rsa.pub.
+    success_msg: "Engine SSH key source available."
     quiet: true
   no_log: true
   tags:

@@ -1,0 +1,171 @@
+---
+# Create an OLVM virtual machine through the Engine REST API (ovirt.ovirt).
+#
+# Phase-1 create path: a VM from the Blank template with a fresh system disk and
+# a NIC on a vNIC profile (olvm-vm by default, created by the olvm_config role),
+# optionally booting an uploaded ISO to install an OS. This is the same approach
+# as clicking Compute > Virtual Machines > New in the Admin Portal, automated.
+#
+# Like the olvm_config role, this runs on the controller (connection: local) and
+# talks to the Engine API - it never SSHes into the Engine. It targets the
+# `engine` inventory host only to reuse its ansible_host (API endpoint) and the
+# vaulted olvm_admin_password (auto-loaded from group_vars/engine).
+#
+# Prerequisites:
+#   - The platform is configured (site.yml / olvm_config): DC, cluster, an Up
+#     host, the olvm-data storage domain and the olvm-vm vNIC profile exist.
+#   - To install from an ISO, upload it first with scripts/upload-disk.yml and
+#     pass its file name as vm_iso_name.
+#
+# Run from the ansible project so ansible.cfg, inventory, vault and the SDK env
+# all resolve:
+#
+#   cd olvm-platform/ansible
+#   ansible-playbook ../scripts/create-vm.yml -e vm_name=lab-vm-01
+#   # or with a vars file:
+#   ansible-playbook ../scripts/create-vm.yml -e @../scripts/create-vm.vars.example.yml
+
+- name: Create an OLVM virtual machine via the Engine API
+  hosts: engine
+  connection: local
+  become: false
+  gather_facts: false
+  # Run against the controller's Python (where ansible + the oVirt SDK live), not
+  # the engine group's remote interpreter. Same reasoning as the olvm_config play.
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+    # --- API connection (mirrors roles/olvm_config/defaults/main.yml) --------
+    olvm_api_url: "https://{{ ansible_host }}/ovirt-engine/api"
+    olvm_api_username: admin@ovirt@internalsso
+    olvm_api_insecure: true
+    olvm_api_ca_file: ""
+
+    # --- VM definition (override with -e or a vars file) ---------------------
+    # vm_name is REQUIRED (no default). Everything below has a lab default.
+    vm_cluster: olvm-lab-cluster
+    vm_memory: 2GiB
+    vm_memory_guaranteed: "{{ vm_memory }}"
+    vm_cpu_cores: 1
+    vm_cpu_sockets: 1
+    vm_operating_system: rhel_9x64
+
+    # System disk (created fresh and attached, marked bootable).
+    vm_disk_size: 20GiB
+    vm_disk_format: cow
+    vm_disk_interface: virtio_scsi
+    vm_storage_domain: olvm-data
+
+    # NIC attached to a vNIC profile (olvm-vm is created by olvm_config).
+    vm_nic_name: nic1
+    vm_nic_interface: virtio
+    vm_vnic_profile: olvm-vm
+
+    # Optional install ISO (file name as uploaded by scripts/upload-disk.yml).
+    # When set, the CD is attached and the VM boots cdrom first, then disk.
+    vm_iso_name: ""
+
+    # Template to create the VM from. Empty means the built-in Blank template
+    # (the module's default) - do not pass "Blank" explicitly, as that triggers a
+    # data-center-scoped lookup that can fail. Set a name to clone a template.
+    vm_template: ""
+
+    # present = define the VM (stopped); running = also power it on.
+    vm_state: present
+
+  tasks:
+    - name: Validate the required inputs
+      ansible.builtin.assert:
+        that:
+          - vm_name is defined
+          - vm_name | length > 0
+          - olvm_admin_password is defined
+          - olvm_admin_password | length > 0
+        fail_msg: >-
+          create-vm.yml needs vm_name (pass with -e vm_name=... or a vars file)
+          and the vaulted olvm_admin_password (auto-loaded from
+          group_vars/engine). One of these is missing.
+        success_msg: "VM create inputs look valid."
+        quiet: true
+
+    - name: Create the VM via the Engine API
+      block:
+        - name: Obtain an OLVM Engine API token
+          ovirt.ovirt.ovirt_auth:
+            url: "{{ olvm_api_url }}"
+            username: "{{ olvm_api_username }}"
+            password: "{{ olvm_admin_password }}"
+            insecure: "{{ olvm_api_insecure | bool }}"
+            ca_file: "{{ olvm_api_ca_file if (olvm_api_ca_file | length > 0) else omit }}"
+          register: olvm_auth_login
+          no_log: true
+
+        - name: Store the API session as an explicit variable
+          ansible.builtin.set_fact:
+            olvm_api_auth: "{{ olvm_auth_login.ansible_facts.ovirt_auth }}"
+          no_log: true
+
+        - name: "Ensure the VM {{ vm_name }} exists (from {{ vm_template if (vm_template | length > 0) else 'Blank' }}) with a NIC"
+          ovirt.ovirt.ovirt_vm:
+            auth: "{{ olvm_api_auth }}"
+            name: "{{ vm_name }}"
+            cluster: "{{ vm_cluster }}"
+            template: "{{ vm_template if (vm_template | length > 0) else omit }}"
+            memory: "{{ vm_memory }}"
+            memory_guaranteed: "{{ vm_memory_guaranteed }}"
+            cpu_cores: "{{ vm_cpu_cores | int }}"
+            cpu_sockets: "{{ vm_cpu_sockets | int }}"
+            operating_system: "{{ vm_operating_system }}"
+            type: server
+            nics:
+              - name: "{{ vm_nic_name }}"
+                interface: "{{ vm_nic_interface }}"
+                profile_name: "{{ vm_vnic_profile }}"
+            cd_iso: "{{ vm_iso_name if (vm_iso_name | length > 0) else omit }}"
+            boot_devices: "{{ ['cdrom', 'hd'] if (vm_iso_name | length > 0) else ['hd'] }}"
+            state: present
+          register: olvm_vm_result
+
+        - name: "Create and attach the {{ vm_disk_size }} system disk"
+          ovirt.ovirt.ovirt_disk:
+            auth: "{{ olvm_api_auth }}"
+            name: "{{ vm_name }}-disk0"
+            vm_name: "{{ vm_name }}"
+            size: "{{ vm_disk_size }}"
+            format: "{{ vm_disk_format }}"
+            interface: "{{ vm_disk_interface }}"
+            storage_domain: "{{ vm_storage_domain }}"
+            bootable: true
+            state: present
+          register: olvm_vm_disk_result
+
+        - name: "Set the VM power state to {{ vm_state }}"
+          ovirt.ovirt.ovirt_vm:
+            auth: "{{ olvm_api_auth }}"
+            name: "{{ vm_name }}"
+            cluster: "{{ vm_cluster }}"
+            cd_iso: "{{ vm_iso_name if (vm_iso_name | length > 0) else omit }}"
+            state: "{{ vm_state }}"
+          register: olvm_vm_power_result
+
+        - name: Show the VM configuration summary
+          ansible.builtin.debug:
+            msg:
+              - "==================== CREATE VM SUMMARY ====================="
+              - "VM               : {{ vm_name }} (cluster {{ vm_cluster }})"
+              - "vCPUs / memory   : {{ vm_cpu_sockets }}x{{ vm_cpu_cores }} / {{ vm_memory }}"
+              - "System disk      : {{ vm_name }}-disk0 {{ vm_disk_size }} ({{ vm_disk_format }}, {{ vm_disk_interface }}) on {{ vm_storage_domain }}"
+              - "NIC              : {{ vm_nic_name }} -> vNIC profile {{ vm_vnic_profile }}"
+              - "Install ISO      : {{ vm_iso_name if (vm_iso_name | length > 0) else '(none - blank disk)' }}"
+              - "Power state      : {{ vm_state }}{{ ' (changed)' if (olvm_vm_power_result is changed) else '' }}"
+              - "==========================================================="
+              - "Open a console from Compute > Virtual Machines to install the OS."
+              - "==========================================================="
+
+      always:
+        - name: Revoke the Engine API token
+          ovirt.ovirt.ovirt_auth:
+            state: absent
+            ovirt_auth: "{{ olvm_api_auth | default(omit) }}"
+          when: olvm_api_auth is defined and (olvm_api_auth.token | default('')) | length > 0
+          no_log: true

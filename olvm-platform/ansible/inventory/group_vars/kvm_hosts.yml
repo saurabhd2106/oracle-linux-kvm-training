@@ -9,10 +9,12 @@ olvm_release_package: oracle-ovirt-release-45-el9
 # Minimum Oracle Linux version the host must run. Step 01 fails fast below this.
 olvm_min_ol_version: "9.6"
 
-# Repositories that must be enabled after the release package is installed.
+# Repositories that must be enabled after the release package is installed. The
+# oracle-ovirt-release-45-el9 package creates these repo IDs (same as on el8);
+# they are enabled by default but asserted/re-enabled here.
 olvm_required_repos:
-  - ol9_ovirt45
-  - ol9_ovirt45_extras
+  - ovirt-4.5
+  - ovirt-4.5-extra
 
 # OCI base-image extras that can pull in conflicting package versions. These are
 # disabled if present and enabled. Add cloud-image-specific repos to
@@ -22,15 +24,12 @@ repos_to_disable:
   - ol9_oci_included
 extra_repos_to_disable: []
 
-# REQUIRED: the OLVM Engine's SSH public key. Either paste the key string here or
-# set it to a path of a local file containing the key. There is no default so the
-# run fails fast if it is missing. Do NOT commit a real key to a shared repo.
-#
-# The Engine's key is generated on the Engine host during engine-setup. After the
-# engine play finishes, copy it from the Engine and paste it here (or point this
-# at a local file), then run the kvm_hosts play:
-#   ssh -i ../terraform/generated/sau-olvm-platform opc@<engine_ip> \
-#       sudo cat /etc/pki/ovirt-engine/keys/engine_id_rsa.pub
+# OPTIONAL: the OLVM Engine's SSH public key. Leave empty to have olvm_host_prep
+# derive it automatically on the Engine host (the 'engine' inventory group) from
+# its private key /etc/pki/ovirt-engine/keys/engine_id_rsa via `ssh-keygen -y`
+# (engine-setup only stores the private key), so no manual copy is needed. Only
+# set this to override the source: paste the key string here, or a path to a local
+# file containing it. Do NOT commit a real key to a shared repo.
 engine_ssh_public_key: ""
 
 # Ports the OLVM Engine needs to reach on the host. Opened in local firewalld

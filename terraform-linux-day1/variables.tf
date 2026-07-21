@@ -68,8 +68,6 @@ variable "vms" {
   }))
   default = {
     vm1 = {}
-    vm2 = {}
-    vm3 = {}
   }
 
   validation {
@@ -78,6 +76,12 @@ variable "vms" {
     ])
     error_message = "each vms hostname_label must be 2-15 characters, start with a lowercase letter, and contain only lowercase letters, numbers, and hyphens."
   }
+}
+
+variable "secondary_vnic_vms" {
+  description = "List of vms keys that get an extra secondary VNIC for the KVM bridged-guest labs (Lab 4.1 Option 1/2). The VNIC is attached in the public subnet with source/destination check disabled so a KVM guest can use its OCI-assigned MAC/IP. Empty list = none."
+  type        = list(string)
+  default     = []
 }
 
 variable "instance_shape" {

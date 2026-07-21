@@ -4,6 +4,7 @@
 #   terraform output ansible_inventory_hint
 #   terraform output -raw engine_public_ip
 #   terraform output kvm_host_public_ips
+#   terraform output kvm_host_private_ips    # the Engine "Add Host" address
 #   terraform output -raw nfs_public_ip
 #   terraform output -raw nfs_private_ip     # KVM hosts mount the export from here
 #
@@ -11,6 +12,9 @@
 #   engine      -> OLVM 4.5 Engine (Oracle Linux 8)   -> role olvm_engine
 #   kvm_hosts   -> OLVM KVM hosts (Oracle Linux 9.6+)  -> role olvm_host_prep
 #   nfs_server  -> NFS storage server (Oracle Linux 9) -> role nfs_server
+# The engine group is reused by the olvm_config role, which runs locally and
+# calls the Engine API to create the Data Center, Cluster, Hosts and storage
+# domain (needs host_address on each KVM host, below).
 ---
 engine:
   hosts:
@@ -22,9 +26,13 @@ kvm_hosts:
     olvm-kvm-01:
       ansible_host: 203.0.113.21
       target_hostname: olvm-kvm-01.lab.local
+      # Private IP the Engine uses to reach this host (terraform output
+      # kvm_host_private_ips). Required by the olvm_config play to "Add Host".
+      host_address: 10.0.1.11
     olvm-kvm-02:
       ansible_host: 203.0.113.22
       target_hostname: olvm-kvm-02.lab.local
+      host_address: 10.0.1.12
 
 nfs_server:
   hosts:

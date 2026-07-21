@@ -7,11 +7,16 @@
 #   2. OLVM Engine         - installs the Manager (engine-setup).
 #   3. KVM hosts           - prepped for "Add Host" (needs the Engine's SSH key;
 #                            see group_vars/kvm_hosts.yml -> engine_ssh_public_key).
+#   4. OLVM config         - creates the Data Center, Cluster, adds the hosts and
+#                            the NFS storage domain via the Engine API. Runs on
+#                            the controller (connection: local); requires the
+#                            ovirt.ovirt collection + ovirt-engine-sdk-python.
 #
 # Run everything:      ansible-playbook site.yml
 # Run one tier:        ansible-playbook site.yml --limit nfs_server
 #                      ansible-playbook site.yml --limit engine
 #                      ansible-playbook site.yml --limit kvm_hosts
+#                      ansible-playbook site.yml --limit engine --tags olvm_config
 
 - name: Prepare the NFS storage server
   hosts: nfs_server
@@ -33,3 +38,24 @@
   gather_facts: true
   roles:
     - olvm_host_prep
+
+# 4. Create the OLVM objects (Data Center, Cluster, Hosts, NFS storage domain)
+#    through the Engine REST API. Targets the engine group for its FQDN/admin
+#    password, but runs locally (connection: local) and calls the API - it never
+#    SSHes into the Engine, so become is off. Must run after the kvm_hosts play
+#    (host add relies on the Engine SSH key authorized there).
+- name: Configure OLVM objects via the Engine API
+  hosts: engine
+  connection: local
+  become: false
+  gather_facts: false
+  # This play runs locally, so ignore the engine group's remote
+  # ansible_python_interpreter (/usr/bin/python3.9, which only exists on the OL8
+  # Engine) and use the controller's Python - the one running ansible, where the
+  # ovirt-engine-sdk-python package is installed.
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  tags:
+    - olvm_config
+  roles:
+    - olvm_config

@@ -2,7 +2,12 @@
 # Ansible collections required by this project.
 #   ansible.posix     - firewalld, mount, authorized_key modules
 #   community.general - filesystem module (formats the NFS data volume)
+#   ovirt.ovirt       - OLVM/oVirt Engine API modules (olvm_config role:
+#                       datacenter, cluster, host, storage domain). Requires the
+#                       ovirt-engine-sdk-python package in the controller's
+#                       Python env (see ansible/README.md).
 # Install with: ansible-galaxy collection install -r requirements.yml
 collections:
   - name: ansible.posix
   - name: community.general
+  - name: ovirt.ovirt

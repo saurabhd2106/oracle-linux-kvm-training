@@ -1,0 +1,157 @@
+---
+# Manage OLVM virtual machine snapshots through the Engine REST API
+# (ovirt.ovirt.ovirt_snapshot). Create a restore point, roll a VM back to one,
+# or delete snapshots - the automated equivalent of the Snapshots tab in the
+# Admin Portal.
+#
+# Runs on the controller (connection: local) and talks to the Engine API, same
+# pattern as create-vm.yml / the olvm_config role.
+#
+# Run from the ansible project:
+#
+#   cd olvm-platform/ansible
+#   # create a snapshot (optionally capturing live memory)
+#   ansible-playbook ../scripts/vm-snapshot.yml \
+#     -e vm_name=lab-vm-01 -e snapshot_description=before-upgrade
+#   # restore it (VM should be stopped for a disk+memory restore)
+#   ansible-playbook ../scripts/vm-snapshot.yml \
+#     -e vm_name=lab-vm-01 -e snapshot_description=before-upgrade -e snapshot_action=restore
+#   # delete it
+#   ansible-playbook ../scripts/vm-snapshot.yml \
+#     -e vm_name=lab-vm-01 -e snapshot_description=before-upgrade -e snapshot_action=delete
+
+- name: Manage an OLVM VM snapshot via the Engine API
+  hosts: engine
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+    # --- API connection (mirrors roles/olvm_config/defaults/main.yml) --------
+    olvm_api_url: "https://{{ ansible_host }}/ovirt-engine/api"
+    olvm_api_username: admin@ovirt@internalsso
+    olvm_api_insecure: true
+    olvm_api_ca_file: ""
+
+    # --- Snapshot action (override with -e or a vars file) -------------------
+    # vm_name and snapshot_description are REQUIRED.
+    # snapshot_action: create (default) | restore | delete
+    snapshot_action: create
+    # Capture the running VM's memory in the snapshot (create), or restore it
+    # (restore). The guest is briefly paused while memory is saved.
+    snapshot_use_memory: false
+    # Target a specific snapshot id for restore/delete; empty means resolve it
+    # from snapshot_description.
+    snapshot_id: ""
+
+  tasks:
+    - name: Validate the required inputs
+      ansible.builtin.assert:
+        that:
+          - vm_name is defined
+          - vm_name | length > 0
+          - snapshot_description is defined
+          - snapshot_description | length > 0
+          - olvm_admin_password is defined
+          - olvm_admin_password | length > 0
+          - snapshot_action in ['create', 'restore', 'delete']
+        fail_msg: >-
+          vm-snapshot.yml needs vm_name, snapshot_description, a valid
+          snapshot_action (create|restore|delete) and the vaulted
+          olvm_admin_password (auto-loaded from group_vars/engine).
+        success_msg: "Snapshot inputs look valid."
+        quiet: true
+
+    - name: Manage the snapshot via the Engine API
+      block:
+        - name: Obtain an OLVM Engine API token
+          ovirt.ovirt.ovirt_auth:
+            url: "{{ olvm_api_url }}"
+            username: "{{ olvm_api_username }}"
+            password: "{{ olvm_admin_password }}"
+            insecure: "{{ olvm_api_insecure | bool }}"
+            ca_file: "{{ olvm_api_ca_file if (olvm_api_ca_file | length > 0) else omit }}"
+          register: olvm_auth_login
+          no_log: true
+
+        - name: Store the API session as an explicit variable
+          ansible.builtin.set_fact:
+            olvm_api_auth: "{{ olvm_auth_login.ansible_facts.ovirt_auth }}"
+          no_log: true
+
+        - name: "Create snapshot '{{ snapshot_description }}' of {{ vm_name }}"
+          ovirt.ovirt.ovirt_snapshot:
+            auth: "{{ olvm_api_auth }}"
+            vm_name: "{{ vm_name }}"
+            description: "{{ snapshot_description }}"
+            use_memory: "{{ snapshot_use_memory | bool }}"
+            state: present
+          register: olvm_snapshot_create
+          when: snapshot_action == 'create'
+
+        - name: "Look up snapshot '{{ snapshot_description }}' on {{ vm_name }}"
+          ovirt.ovirt.ovirt_snapshot_info:
+            auth: "{{ olvm_api_auth }}"
+            vm: "{{ vm_name }}"
+            description: "{{ snapshot_description }}"
+          register: olvm_snapshot_lookup
+          when:
+            - snapshot_action in ['restore', 'delete']
+            - snapshot_id | length == 0
+
+        - name: Resolve the target snapshot id
+          ansible.builtin.set_fact:
+            snapshot_target_id: >-
+              {{ snapshot_id if (snapshot_id | length > 0)
+                 else (olvm_snapshot_lookup.ovirt_snapshots[0].id
+                       if (olvm_snapshot_lookup.ovirt_snapshots | default([]) | length > 0)
+                       else '') }}
+          when: snapshot_action in ['restore', 'delete']
+
+        - name: Fail if no matching snapshot was found for restore/delete
+          ansible.builtin.assert:
+            that:
+              - snapshot_target_id | length > 0
+            fail_msg: >-
+              No snapshot matching description '{{ snapshot_description }}' was
+              found on {{ vm_name }} (and no snapshot_id was given).
+            quiet: true
+          when: snapshot_action in ['restore', 'delete']
+
+        - name: "Restore {{ vm_name }} to snapshot '{{ snapshot_description }}'"
+          ovirt.ovirt.ovirt_snapshot:
+            auth: "{{ olvm_api_auth }}"
+            vm_name: "{{ vm_name }}"
+            snapshot_id: "{{ snapshot_target_id }}"
+            use_memory: "{{ snapshot_use_memory | bool }}"
+            state: restore
+          register: olvm_snapshot_restore
+          when: snapshot_action == 'restore'
+
+        - name: "Delete snapshot '{{ snapshot_description }}' from {{ vm_name }}"
+          ovirt.ovirt.ovirt_snapshot:
+            auth: "{{ olvm_api_auth }}"
+            vm_name: "{{ vm_name }}"
+            snapshot_id: "{{ snapshot_target_id }}"
+            state: absent
+          register: olvm_snapshot_delete
+          when: snapshot_action == 'delete'
+
+        - name: Show the snapshot action summary
+          ansible.builtin.debug:
+            msg:
+              - "=================== VM SNAPSHOT SUMMARY ===================="
+              - "VM               : {{ vm_name }}"
+              - "Action           : {{ snapshot_action }}"
+              - "Snapshot         : {{ snapshot_description }}"
+              - "Memory included  : {{ snapshot_use_memory | bool }}"
+              - "==========================================================="
+
+      always:
+        - name: Revoke the Engine API token
+          ovirt.ovirt.ovirt_auth:
+            state: absent
+            ovirt_auth: "{{ olvm_api_auth | default(omit) }}"
+          when: olvm_api_auth is defined and (olvm_api_auth.token | default('')) | length > 0
+          no_log: true

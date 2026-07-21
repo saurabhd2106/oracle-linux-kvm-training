@@ -1,0 +1,17 @@
+---
+# 05 - Attach the NFS export as a data storage domain and add it to the Data
+# Center. Requires an Up host in the DC (added in step 04) to initialize the
+# domain, so the first KVM host is used as the initializing host.
+
+- name: "Ensure NFS storage domain {{ olvm_storage_domain_name }} is attached to {{ olvm_datacenter_name }}"
+  ovirt.ovirt.ovirt_storage_domain:
+    auth: "{{ olvm_api_auth }}"
+    name: "{{ olvm_storage_domain_name }}"
+    domain_function: data
+    host: "{{ groups['kvm_hosts'][0] }}"
+    data_center: "{{ olvm_datacenter_name }}"
+    nfs:
+      address: "{{ olvm_storage_domain_nfs_address }}"
+      path: "{{ olvm_storage_domain_path }}"
+    state: present
+  register: olvm_storage_domain_result

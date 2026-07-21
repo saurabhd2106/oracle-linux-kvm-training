@@ -1,0 +1,46 @@
+---
+# Example variables file for create-vm.yml. Copy or edit, then pass it with:
+#
+#   cd olvm-platform/ansible
+#   ansible-playbook ../scripts/create-vm.yml -e @../scripts/create-vm.vars.example.yml
+#
+# Only vm_name is required. Everything else has a sensible lab default in the
+# playbook and is shown here (commented) for reference.
+
+# --- Required ----------------------------------------------------------------
+# Name of the VM to create (must be unique in the cluster).
+vm_name: lab-vm-01
+
+# --- Optional overrides (defaults shown) -------------------------------------
+# Target cluster (created by olvm_config).
+# vm_cluster: olvm-lab-cluster
+
+# Memory and vCPU layout.
+# vm_memory: 2GiB
+# vm_memory_guaranteed: 2GiB
+# vm_cpu_cores: 1
+# vm_cpu_sockets: 1
+
+# Guest OS hint shown to the Engine (affects defaults/devices).
+# vm_operating_system: rhel_9x64
+
+# System disk (created fresh and marked bootable).
+# vm_disk_size: 20GiB
+# vm_disk_format: cow          # cow (thin) or raw (preallocated)
+# vm_disk_interface: virtio_scsi
+# vm_storage_domain: olvm-data
+
+# NIC and the vNIC profile it attaches to (olvm-vm is created by olvm_config).
+# vm_nic_name: nic1
+# vm_nic_interface: virtio
+# vm_vnic_profile: olvm-vm
+
+# Install ISO to boot from. Upload it first with scripts/upload-disk.yml and put
+# its file name here; leave empty to create the VM with a blank disk only.
+# vm_iso_name: OracleLinux-R9-U7-x86_64-dvd.iso
+
+# Template to clone the VM from. Empty = the built-in Blank template.
+# vm_template: ""
+
+# present = define the VM (stopped); running = also power it on.
+# vm_state: present

@@ -1,0 +1,25 @@
+---
+# 01 - Obtain an OLVM/oVirt API session token. The ovirt_auth module returns the
+# session under result.ansible_facts.ovirt_auth; we capture it as the registered
+# variable olvm_api_auth (avoiding the deprecated top-level fact injection) and
+# pass it to every later module via `auth: "{{ olvm_api_auth }}"`. It is revoked
+# in the role's always block.
+
+- name: Obtain an OLVM Engine API token
+  ovirt.ovirt.ovirt_auth:
+    url: "{{ olvm_api_url }}"
+    username: "{{ olvm_api_username }}"
+    password: "{{ olvm_admin_password }}"
+    insecure: "{{ olvm_api_insecure | bool }}"
+    ca_file: "{{ olvm_api_ca_file if (olvm_api_ca_file | length > 0) else omit }}"
+  register: olvm_auth_login
+  no_log: true
+
+- name: Store the API session as an explicit variable (no fact injection)
+  ansible.builtin.set_fact:
+    olvm_api_auth: "{{ olvm_auth_login.ansible_facts.ovirt_auth }}"
+  no_log: true
+
+- name: Confirm the API token was acquired
+  ansible.builtin.debug:
+    msg: "Authenticated to {{ olvm_api_url }} as {{ olvm_api_username }}."

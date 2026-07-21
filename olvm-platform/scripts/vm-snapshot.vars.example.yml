@@ -1,0 +1,25 @@
+---
+# Example variables file for vm-snapshot.yml. Copy or edit, then pass it with:
+#
+#   cd olvm-platform/ansible
+#   ansible-playbook ../scripts/vm-snapshot.yml -e @../scripts/vm-snapshot.vars.example.yml
+#
+# vm_name and snapshot_description are required.
+
+# --- Required ----------------------------------------------------------------
+# VM to snapshot.
+vm_name: lab-vm-01
+# Snapshot description. Also used to find the snapshot for restore/delete.
+snapshot_description: before-upgrade
+
+# --- Optional overrides (defaults shown) -------------------------------------
+# create (default) | restore | delete
+# snapshot_action: create
+
+# Include the running VM's memory (create) / restore memory state (restore).
+# The guest is briefly paused while memory is saved.
+# snapshot_use_memory: false
+
+# Target a specific snapshot id for restore/delete instead of resolving it from
+# snapshot_description (useful if several snapshots share a description).
+# snapshot_id: ""

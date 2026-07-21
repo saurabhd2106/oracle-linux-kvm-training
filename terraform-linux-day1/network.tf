@@ -54,6 +54,15 @@ resource "oci_core_security_list" "public" {
     }
   }
 
+  # Allow all traffic within the VCN so KVM bridged guests (Lab 4.1) reachable on
+  # a secondary VNIC can be pinged and SSHed from the host and other VCN hosts.
+  ingress_security_rules {
+    description = "Allow all traffic from within the VCN (KVM bridged-guest reachability)"
+    protocol    = "all"
+    source      = var.vcn_cidr_block
+    source_type = "CIDR_BLOCK"
+  }
+
   egress_security_rules {
     description      = "Allow outbound traffic"
     protocol         = "all"

@@ -1,0 +1,32 @@
+---
+# 02 - Ensure the Data Center exists, renaming the built-in "Default" in place on
+# the first run. The ovirt_datacenter module matches by name, so to rename we
+# pass the source object's id together with the new name; on later runs the
+# target already exists and id is omitted (plain idempotent ensure-present).
+
+- name: "Look up Data Center {{ olvm_datacenter_name }}"
+  ovirt.ovirt.ovirt_datacenter_info:
+    auth: "{{ olvm_api_auth }}"
+    pattern: "name={{ olvm_datacenter_name }}"
+  register: olvm_dc_target
+
+- name: "Look up source Data Center {{ olvm_datacenter_source_name }} to rename"
+  ovirt.ovirt.ovirt_datacenter_info:
+    auth: "{{ olvm_api_auth }}"
+    pattern: "name={{ olvm_datacenter_source_name }}"
+  register: olvm_dc_source
+  when: olvm_dc_target.ovirt_datacenters | length == 0
+
+- name: "Ensure/rename Data Center to {{ olvm_datacenter_name }}"
+  ovirt.ovirt.ovirt_datacenter:
+    auth: "{{ olvm_api_auth }}"
+    id: >-
+      {{ olvm_dc_source.ovirt_datacenters[0].id
+         if (olvm_dc_target.ovirt_datacenters | length == 0
+             and olvm_dc_source.ovirt_datacenters | default([]) | length > 0)
+         else omit }}
+    name: "{{ olvm_datacenter_name }}"
+    description: "{{ olvm_datacenter_description }}"
+    local: "{{ olvm_datacenter_local | bool }}"
+    state: present
+  register: olvm_datacenter_result

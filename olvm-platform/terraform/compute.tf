@@ -66,8 +66,12 @@ resource "oci_core_instance" "linux" {
   create_vnic_details {
     assign_public_ip = true
     display_name     = "${local.name_base}-${each.key}-primary-vnic"
-    hostname_label   = coalesce(each.value.hostname_label, substr(replace("${var.name_prefix}${var.project_name}${each.key}", "-", ""), 0, 15))
-    subnet_id        = oci_core_subnet.public.id
+    # Keep the per-VM key so each hostname is unique in the subnet. Derive from
+    # name_prefix + key only (project_name is dropped here) because the 15-char
+    # DNS label limit would otherwise truncate the distinguishing key off a long
+    # project_name and collide (e.g. all VMs -> "sauolvmplatform").
+    hostname_label = coalesce(each.value.hostname_label, substr(replace("${var.name_prefix}-${each.key}", "-", ""), 0, 15))
+    subnet_id      = oci_core_subnet.public.id
   }
 
   source_details {

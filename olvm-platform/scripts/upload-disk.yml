@@ -1,0 +1,171 @@
+---
+# Upload a disk image or ISO to an OLVM storage domain using the official
+# oVirt SDK example script (upload_disk.py) - the same backend the Admin Portal
+# uploader uses (Engine REST API + imageio daemon), but without the browser.
+#
+# WHY run on the Engine: the browser upload path (browser -> Engine proxy ->
+# host imageio -> storage) is sensitive to certificates, extensions and idle
+# timeouts on large files. Running upload_disk.py *on the Engine VM itself* skips
+# the browser entirely and is far more reliable for large ISOs/images. Running it
+# remotely has been reported to fail with connection errors; this playbook SSHes
+# to the Engine and runs the upload there.
+#
+# This is a standalone Day-3 helper and is intentionally NOT wired into site.yml.
+# It reuses the same inventory, vault and SSH key as the main project, so run it
+# from the ansible project directory:
+#
+#   cd olvm-platform/ansible
+#   ansible-playbook ../scripts/upload-disk.yml \
+#     -e upload_disk_image_url='https://.../OracleLinux-R9-U7-x86_64-dvd.iso' \
+#     -e upload_disk_image_name='OracleLinux-R9-U7-x86_64-dvd.iso'
+#
+# or with a vars file:
+#
+#   ansible-playbook ../scripts/upload-disk.yml -e @../scripts/upload-disk.vars.example.yml
+
+- name: Upload a disk image/ISO to an OLVM storage domain via the SDK
+  hosts: engine
+  become: true
+  gather_facts: true
+
+  vars:
+    # --- Required (pass with -e or a vars file) -----------------------------
+    # upload_disk_image_url:  https URL the Engine downloads the image from.
+    # upload_disk_image_name: file name the image is saved as on the Engine and
+    #                         the name upload_disk.py uploads.
+
+    # --- Optional overrides (sensible lab defaults) -------------------------
+    # Storage domain the disk is uploaded to. Defaults to the platform's data
+    # domain (see roles/olvm_config/defaults/main.yml).
+    upload_disk_sd_name: "{{ olvm_storage_domain_name | default('olvm-data') }}"
+
+    # Disk format passed to upload_disk.py. Use raw for ISO images (the script
+    # still auto-detects the content type, iso vs data, from the file itself).
+    upload_disk_format: raw
+
+    # Connection profile name written to ovirt.conf and passed to upload_disk.py
+    # with -c. Any name works as long as both match.
+    upload_disk_profile: OLVM-PROFILE
+
+    # Unprivileged user on the Engine that owns the config file and runs the
+    # upload. The OCI images use "opc".
+    upload_disk_run_user: opc
+
+    # Where the image is downloaded to on the Engine.
+    upload_disk_dest_dir: "/home/{{ upload_disk_run_user }}"
+
+    # API login. Keycloak builds require the full profile suffix
+    # (admin@ovirt@internalsso); reuse the olvm_config default if present.
+    upload_disk_username: "{{ olvm_api_username | default('admin@ovirt@internalsso') }}"
+
+    # Engine URL and CA file as seen from the Engine itself. The FQDN resolves
+    # locally via the /etc/hosts entry written by the olvm_engine role.
+    upload_disk_engine_url: "https://{{ olvm_engine_fqdn }}"
+    upload_disk_cafile: /etc/pki/ovirt-engine/ca.pem
+
+    # Absolute path to the SDK example script (from python3-ovirt-engine-sdk4).
+    upload_disk_script: /usr/share/doc/python3-ovirt-engine-sdk4/examples/upload_disk.py
+
+  tasks:
+    - name: Validate the inputs needed to download and upload the image
+      ansible.builtin.assert:
+        that:
+          - upload_disk_image_url is defined
+          - upload_disk_image_url | length > 0
+          - upload_disk_image_name is defined
+          - upload_disk_image_name | length > 0
+          - olvm_admin_password is defined
+          - olvm_admin_password | length > 0
+        fail_msg: >-
+          This playbook needs upload_disk_image_url and upload_disk_image_name
+          (pass with -e or a vars file) and the vaulted olvm_admin_password
+          (auto-loaded from group_vars/engine). One of these is missing.
+        success_msg: "Upload inputs look valid."
+        quiet: true
+
+    - name: Install the oVirt SDK and imageio client packages
+      ansible.builtin.dnf:
+        name:
+          - python3-ovirt-engine-sdk4
+          - ovirt-imageio-client
+        state: present
+
+    - name: Confirm the upload_disk.py example script is present
+      ansible.builtin.stat:
+        path: "{{ upload_disk_script }}"
+      register: upload_disk_script_stat
+
+    - name: Fail if the example script is missing
+      ansible.builtin.assert:
+        that:
+          - upload_disk_script_stat.stat.exists
+        fail_msg: >-
+          {{ upload_disk_script }} not found. It ships with
+          python3-ovirt-engine-sdk4; confirm the package installed correctly.
+        quiet: true
+
+    - name: Confirm the Engine CA certificate exists
+      ansible.builtin.stat:
+        path: "{{ upload_disk_cafile }}"
+      register: upload_disk_cafile_stat
+
+    - name: Fail if the CA certificate is missing
+      ansible.builtin.assert:
+        that:
+          - upload_disk_cafile_stat.stat.exists
+        fail_msg: >-
+          CA file {{ upload_disk_cafile }} not found. Locate it with
+          'sudo find /etc/pki/ovirt-engine -iname "*ca*.pem"' and set
+          upload_disk_cafile accordingly.
+        quiet: true
+
+    - name: Ensure the config directory exists for the run user
+      ansible.builtin.file:
+        path: "/home/{{ upload_disk_run_user }}/.config"
+        state: directory
+        owner: "{{ upload_disk_run_user }}"
+        group: "{{ upload_disk_run_user }}"
+        mode: "0700"
+
+    - name: Write the oVirt connection profile (contains the admin password)
+      ansible.builtin.copy:
+        dest: "/home/{{ upload_disk_run_user }}/.config/ovirt.conf"
+        owner: "{{ upload_disk_run_user }}"
+        group: "{{ upload_disk_run_user }}"
+        mode: "0600"
+        content: |
+          [{{ upload_disk_profile }}]
+          engine_url = {{ upload_disk_engine_url }}
+          username = {{ upload_disk_username }}
+          password = {{ olvm_admin_password }}
+          cafile = {{ upload_disk_cafile }}
+      no_log: true
+
+    - name: Download the image onto the Engine
+      ansible.builtin.get_url:
+        url: "{{ upload_disk_image_url }}"
+        dest: "{{ upload_disk_dest_dir }}/{{ upload_disk_image_name }}"
+        owner: "{{ upload_disk_run_user }}"
+        group: "{{ upload_disk_run_user }}"
+        mode: "0644"
+
+    - name: Upload the image to the storage domain with upload_disk.py
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ upload_disk_script }}"
+          - -c
+          - "{{ upload_disk_profile }}"
+          - --sd-name
+          - "{{ upload_disk_sd_name }}"
+          - --disk-format
+          - "{{ upload_disk_format }}"
+          - "{{ upload_disk_dest_dir }}/{{ upload_disk_image_name }}"
+      become: true
+      become_user: "{{ upload_disk_run_user }}"
+      register: upload_disk_result
+      changed_when: "'Upload completed successfully' in upload_disk_result.stdout"
+
+    - name: Show the upload_disk.py output
+      ansible.builtin.debug:
+        msg: "{{ upload_disk_result.stdout_lines }}"

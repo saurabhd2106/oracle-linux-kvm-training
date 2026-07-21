@@ -1,0 +1,33 @@
+---
+# 03 - Ensure the Cluster exists in the Data Center, renaming the built-in
+# "Default" cluster in place on the first run (same id+name rename pattern as the
+# Data Center). Task 02 renames the DC first, so data_center resolves to the
+# already-renamed DC. cpu_type is only sent when olvm_cluster_cpu_type is set.
+
+- name: "Look up Cluster {{ olvm_cluster_name }}"
+  ovirt.ovirt.ovirt_cluster_info:
+    auth: "{{ olvm_api_auth }}"
+    pattern: "name={{ olvm_cluster_name }}"
+  register: olvm_cluster_target
+
+- name: "Look up source Cluster {{ olvm_cluster_source_name }} to rename"
+  ovirt.ovirt.ovirt_cluster_info:
+    auth: "{{ olvm_api_auth }}"
+    pattern: "name={{ olvm_cluster_source_name }}"
+  register: olvm_cluster_source
+  when: olvm_cluster_target.ovirt_clusters | length == 0
+
+- name: "Ensure/rename Cluster to {{ olvm_cluster_name }}"
+  ovirt.ovirt.ovirt_cluster:
+    auth: "{{ olvm_api_auth }}"
+    id: >-
+      {{ olvm_cluster_source.ovirt_clusters[0].id
+         if (olvm_cluster_target.ovirt_clusters | length == 0
+             and olvm_cluster_source.ovirt_clusters | default([]) | length > 0)
+         else omit }}
+    name: "{{ olvm_cluster_name }}"
+    data_center: "{{ olvm_datacenter_name }}"
+    description: "{{ olvm_cluster_description }}"
+    cpu_type: "{{ olvm_cluster_cpu_type if (olvm_cluster_cpu_type | length > 0) else omit }}"
+    state: present
+  register: olvm_cluster_result

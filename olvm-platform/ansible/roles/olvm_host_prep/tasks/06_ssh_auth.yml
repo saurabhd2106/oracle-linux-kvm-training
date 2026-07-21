@@ -2,8 +2,18 @@
 # 06 - Authorize the OLVM Engine's SSH public key for root so the Engine can log
 # in and deploy vdsm when the host is added. Key-based access only: we never
 # enable root password auth and never touch PermitRootLogin.
+#
+# The key is taken from engine_ssh_public_key when set (a literal key string or a
+# path to a local file). When it is empty, the key is derived automatically on the
+# Engine host from its private key (/etc/pki/ovirt-engine/keys/engine_id_rsa) with
+# `ssh-keygen -y` - engine-setup only stores the private key, not a .pub file - so
+# no manual copy step is needed after engine-setup.
 
-- name: Check whether engine_ssh_public_key points to a local file
+- name: Determine whether an explicit Engine key was provided
+  ansible.builtin.set_fact:
+    olvm_engine_key_provided: "{{ (engine_ssh_public_key | default('') | length) > 0 }}"
+
+- name: Check whether the provided engine_ssh_public_key points to a local file
   ansible.builtin.stat:
     path: "{{ engine_ssh_public_key }}"
   delegate_to: localhost
@@ -11,22 +21,38 @@
   register: olvm_engine_key_file
   # A raw key string can be long; stat on it is harmless and just returns exists=false.
   failed_when: false
+  when: olvm_engine_key_provided
 
-- name: Resolve the Engine public key (literal string or file contents)
+- name: Derive the Engine public key on the Engine host (when not provided)
+  ansible.builtin.command:
+    cmd: ssh-keygen -y -f /etc/pki/ovirt-engine/keys/engine_id_rsa
+  delegate_to: "{{ groups['engine'][0] }}"
+  become: true
+  register: olvm_engine_key_derived
+  changed_when: false
+  when: not olvm_engine_key_provided
+
+- name: Resolve the Engine public key (explicit string/file, or derived from the Engine)
   ansible.builtin.set_fact:
     olvm_engine_key: >-
       {{ (lookup('file', engine_ssh_public_key) | trim)
-         if (olvm_engine_key_file.stat.exists | default(false)) and (olvm_engine_key_file.stat.isreg | default(false))
-         else (engine_ssh_public_key | trim) }}
+         if (olvm_engine_key_provided
+             and (olvm_engine_key_file.stat.exists | default(false))
+             and (olvm_engine_key_file.stat.isreg | default(false)))
+         else ((engine_ssh_public_key | trim)
+               if olvm_engine_key_provided
+               else (olvm_engine_key_derived.stdout | trim)) }}
 
 - name: Validate the resolved key looks like an SSH public key
   ansible.builtin.assert:
     that:
       - olvm_engine_key is match('^(ssh-(rsa|ed25519|dss)|ecdsa-sha2-|sk-)')
     fail_msg: >-
-      engine_ssh_public_key did not resolve to a valid SSH public key. Provide
-      the Engine's public key line (e.g. 'ssh-rsa AAAA... engine') or a path to a
-      file containing it.
+      Could not resolve a valid Engine SSH public key. It was neither provided in
+      engine_ssh_public_key (a key line like 'ssh-rsa AAAA... engine' or a path to
+      a file) nor derived from the Engine host's private key at
+      /etc/pki/ovirt-engine/keys/engine_id_rsa. Ensure the engine play has run
+      (engine-setup generates that key) or set engine_ssh_public_key explicitly.
     success_msg: "Engine public key resolved and looks valid."
     quiet: true
   no_log: true

@@ -1,6 +1,6 @@
 # OCI Oracle Linux VMs
 
-This Terraform code provisions one or more Oracle Linux virtual machines on Oracle Cloud Infrastructure (OCI). The number of VMs and their per-VM settings are configurable via the `vms` map. Each VM gets:
+This Terraform code provisions a single Oracle Linux virtual machine on Oracle Cloud Infrastructure (OCI) by default. Additional VMs and their per-VM settings are configurable via the `vms` map. Each VM gets:
 
 - Shape: `VM.Standard.E5.Flex` (default, per-VM overridable)
 - OCPUs: `4` (default, per-VM overridable)
@@ -74,7 +74,15 @@ You can override a VM's `display_name` or `hostname_label` per entry in the `vms
 
 ### Configuring the VMs
 
-The `vms` variable is a map keyed by short VM name. The number of VMs equals the number of entries, so add or remove keys to scale up or down. An empty object `{}` uses the global defaults; set any field to override it for that VM:
+The `vms` variable is a map keyed by short VM name. The number of VMs equals the number of entries; by default it contains a single `vm1` entry. Add or remove keys to scale up or down. An empty object `{}` uses the global defaults; set any field to override it for that VM:
+
+```hcl
+vms = {
+  vm1 = {}
+}
+```
+
+To create more VMs, add entries and optionally override per-VM fields:
 
 ```hcl
 vms = {

@@ -1,0 +1,30 @@
+---
+# 04 - Add each KVM host to the cluster. Reuses the Engine SSH key already
+# authorized on the host by olvm_host_prep (public_key: true), so no root
+# password is needed. Each host is reached over its private IP (host_address) and
+# we wait for it to reach the Up state before continuing to the storage domain.
+
+- name: Require a private address for every KVM host
+  ansible.builtin.assert:
+    that:
+      - hostvars[item].host_address is defined
+      - hostvars[item].host_address | length > 0
+    fail_msg: >-
+      host_address (the private IP the Engine uses to reach {{ item }}) is not
+      set. Add it per KVM host in inventory/hosts.yml
+      (terraform output kvm_host_private_ips).
+    quiet: true
+  loop: "{{ groups['kvm_hosts'] }}"
+
+- name: "Add each KVM host and wait for Up"
+  ovirt.ovirt.ovirt_host:
+    auth: "{{ olvm_api_auth }}"
+    name: "{{ item }}"
+    address: "{{ hostvars[item].host_address }}"
+    cluster: "{{ olvm_cluster_name }}"
+    public_key: true
+    state: present
+    timeout: "{{ olvm_host_timeout | int }}"
+    poll_interval: "{{ olvm_host_poll_interval | int }}"
+  loop: "{{ groups['kvm_hosts'] }}"
+  register: olvm_host_results

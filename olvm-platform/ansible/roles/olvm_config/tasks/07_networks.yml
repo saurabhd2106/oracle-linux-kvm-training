@@ -1,0 +1,26 @@
+---
+# 07 - Ensure the best-practice logical networks exist in the Data Center and
+# assign their roles at the cluster level (via the clusters parameter). The
+# built-in "ovirtmgmt" network is left untouched. vlan_tag is only sent when a
+# tag is configured (null -> untagged network). Both defaults are non-required,
+# so a host stays operational even before the network is attached to it.
+
+- name: "Ensure logical networks exist in {{ olvm_datacenter_name }}"
+  ovirt.ovirt.ovirt_network:
+    auth: "{{ olvm_api_auth }}"
+    data_center: "{{ olvm_datacenter_name }}"
+    name: "{{ item.name }}"
+    description: "{{ item.description | default(omit) }}"
+    vlan_tag: "{{ item.vlan_tag if (item.vlan_tag is defined and item.vlan_tag is not none) else omit }}"
+    vm_network: "{{ item.vm_network | default(true) }}"
+    clusters:
+      - name: "{{ olvm_cluster_name }}"
+        assigned: true
+        required: "{{ item.required | default(false) }}"
+        migration: "{{ item.migration | default(false) }}"
+        display: "{{ item.display | default(false) }}"
+    state: present
+  loop: "{{ olvm_networks }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: olvm_network_results
