@@ -107,12 +107,14 @@ preflight() {
     info "               ocid=$VNIC_OCID"
     pass "Preflight: secondary VNIC discovered"
 
-    info "Ensuring oci-utils (provides oci-kvm) is installed"
+    # oci-kvm lives in the separate oci-utils-kvm subpackage (oci-utils alone
+    # excludes /usr/bin/oci-kvm). oci-utils-kvm Requires: oci-utils.
+    info "Ensuring oci-utils-kvm (provides oci-kvm) is installed"
     if ! command -v oci-kvm >/dev/null 2>&1; then
-        sudo dnf install -y oci-utils
+        sudo dnf install -y oci-utils-kvm
     fi
     command -v oci-kvm >/dev/null 2>&1 && pass "Preflight: oci-kvm available" \
-        || die "oci-kvm not available after installing oci-utils"
+        || die "oci-kvm not available after installing oci-utils-kvm"
 
     info "Ensuring xorriso is installed (genisoimage is removed on OL9)"
     if ! command -v xorrisofs >/dev/null 2>&1 && ! command -v xorriso >/dev/null 2>&1; then
