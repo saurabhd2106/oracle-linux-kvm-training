@@ -1,0 +1,17 @@
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+target/
+dist/
+.DS_Store
+.env
+.env.local
+*.log
+.idea/
+.vscode/
+
+# Kept locally for teaching labs; not committed
+Dockerfile
+docker-compose.yml

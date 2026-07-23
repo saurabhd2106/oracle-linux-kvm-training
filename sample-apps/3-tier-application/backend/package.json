@@ -1,0 +1,16 @@
+{
+  "name": "three-tier-backend",
+  "version": "1.0.0",
+  "description": "Node API for three-tier Docker training app",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.1",
+    "pg": "^8.13.1"
+  }
+}

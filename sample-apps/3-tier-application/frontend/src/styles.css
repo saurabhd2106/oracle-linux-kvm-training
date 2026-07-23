@@ -1,0 +1,131 @@
+:root {
+  color-scheme: light;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  line-height: 1.5;
+  color: #102a43;
+  background:
+    radial-gradient(circle at top left, #d9eaf7 0, transparent 40%),
+    linear-gradient(180deg, #f5f7fa 0%, #e8eef5 100%);
+  min-height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 4rem;
+}
+
+header {
+  margin-bottom: 1.5rem;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  color: #486581;
+  margin: 0 0 0.35rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.lede {
+  margin: 0.5rem 0 0;
+  color: #486581;
+}
+
+.panel {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #d9e2ec;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+input[type="text"],
+input[type="number"],
+input:not([type]) {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #bcccdc;
+  font: inherit;
+}
+
+button {
+  font: inherit;
+  border: 0;
+  background: #243b53;
+  color: #fff;
+  padding: 0.6rem 0.9rem;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: #627d98;
+}
+
+button.danger {
+  background: #9b1c1c;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid #e0e6ed;
+}
+
+.list li:first-child {
+  border-top: 0;
+}
+
+.list span {
+  display: block;
+  color: #486581;
+  font-size: 0.9rem;
+}
+
+.error {
+  color: #9b1c1c;
+}
