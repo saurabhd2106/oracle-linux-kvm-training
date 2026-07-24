@@ -1,0 +1,40 @@
+---
+# 01 - Run kubeadm init from a templated config. Idempotent: if admin.conf
+# already exists the cluster is initialized and init is skipped.
+
+- name: Check whether the control plane is already initialized
+  ansible.builtin.stat:
+    path: "{{ kubeadm_admin_conf }}"
+  register: admin_conf
+
+- name: Determine the installed kubeadm version
+  ansible.builtin.command: kubeadm version -o short
+  register: kubeadm_version_raw
+  changed_when: false
+
+- name: Set the kubeadm_version fact (for kubernetesVersion pinning)
+  ansible.builtin.set_fact:
+    kubeadm_version: "{{ kubeadm_version_raw.stdout | trim }}"
+
+- name: Render the kubeadm configuration
+  ansible.builtin.template:
+    src: kubeadm-config.yaml.j2
+    dest: "{{ kubeadm_config_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Run kubeadm init
+  ansible.builtin.command: >-
+    kubeadm init
+    --config {{ kubeadm_config_path }}
+    --upload-certs
+  args:
+    creates: "{{ kubeadm_admin_conf }}"
+  register: kubeadm_init
+  when: not admin_conf.stat.exists
+
+- name: Show a short kubeadm init summary
+  ansible.builtin.debug:
+    msg: "kubeadm init completed on {{ inventory_hostname }} ({{ node_ip }})."
+  when: kubeadm_init is changed

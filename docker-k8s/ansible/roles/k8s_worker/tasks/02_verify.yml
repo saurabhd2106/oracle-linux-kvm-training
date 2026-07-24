@@ -1,0 +1,25 @@
+---
+# 02 - Confirm the worker registered and reached Ready. The check runs on the
+# control plane (only it has a kubeconfig) via delegate_to.
+
+- name: Wait for the worker node to become Ready
+  ansible.builtin.command: >-
+    kubectl wait --for=condition=Ready node/{{ ansible_facts['hostname'] }}
+    --timeout={{ worker_ready_timeout }}
+  environment:
+    KUBECONFIG: "{{ control_plane_admin_conf }}"
+  delegate_to: "{{ control_plane_host }}"
+  changed_when: false
+
+- name: Get the cluster node list from the control plane
+  ansible.builtin.command: kubectl get nodes -o wide
+  environment:
+    KUBECONFIG: "{{ control_plane_admin_conf }}"
+  delegate_to: "{{ control_plane_host }}"
+  run_once: true
+  register: cluster_nodes
+  changed_when: false
+
+- name: Show the final cluster node list
+  ansible.builtin.debug:
+    var: cluster_nodes.stdout_lines

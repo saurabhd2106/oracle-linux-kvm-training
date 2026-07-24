@@ -67,8 +67,43 @@
 
     # Template to create the VM from. Empty means the built-in Blank template
     # (the module's default) - do not pass "Blank" explicitly, as that triggers a
-    # data-center-scoped lookup that can fail. Set a name to clone a template.
+    # data-center-scoped lookup that can fail. Set a name (for example a template
+    # sealed by scripts/create-template.yml) to CLONE that template: its system
+    # disk is copied, so no fresh disk is created and vm_iso_name is ignored.
     vm_template: ""
+
+    # --- Cloud-init (Phase 2, for template clones) ---------------------------
+    # When vm_cloud_init is true the VM is initialized on first boot with the
+    # values below (hostname, a user, SSH keys, an optional script). This needs a
+    # cloud-init-enabled guest - i.e. clone from a template, not a blank ISO
+    # install. Only non-empty fields are sent to the Engine.
+    vm_cloud_init: false
+    vm_cloud_init_host_name: ""
+    vm_cloud_init_user_name: ""
+    vm_cloud_init_root_password: ""
+    vm_cloud_init_ssh_keys: ""
+    # Free-form cloud-config appended by cloud-init (for example package installs).
+    vm_cloud_init_custom_script: ""
+    # NIC IP config: dhcp (default) or static. For static also set the address
+    # fields. Applied to vm_nic_name.
+    vm_cloud_init_nic_boot_protocol: dhcp
+    vm_cloud_init_nic_ip_address: ""
+    vm_cloud_init_nic_netmask: ""
+    vm_cloud_init_nic_gateway: ""
+
+    # Assembled cloud-init mapping - only keys with a value are included so the
+    # Engine is not sent empty fields.
+    vm_cloud_init_data: >-
+      {{ {}
+         | combine({'host_name': vm_cloud_init_host_name} if (vm_cloud_init_host_name | length > 0) else {})
+         | combine({'user_name': vm_cloud_init_user_name} if (vm_cloud_init_user_name | length > 0) else {})
+         | combine({'root_password': vm_cloud_init_root_password} if (vm_cloud_init_root_password | length > 0) else {})
+         | combine({'authorized_ssh_keys': vm_cloud_init_ssh_keys} if (vm_cloud_init_ssh_keys | length > 0) else {})
+         | combine({'custom_script': vm_cloud_init_custom_script} if (vm_cloud_init_custom_script | length > 0) else {})
+         | combine({'nic_name': vm_nic_name, 'nic_on_boot': true, 'nic_boot_protocol': vm_cloud_init_nic_boot_protocol})
+         | combine({'nic_ip_address': vm_cloud_init_nic_ip_address} if (vm_cloud_init_nic_ip_address | length > 0) else {})
+         | combine({'nic_netmask': vm_cloud_init_nic_netmask} if (vm_cloud_init_nic_netmask | length > 0) else {})
+         | combine({'nic_gateway': vm_cloud_init_nic_gateway} if (vm_cloud_init_nic_gateway | length > 0) else {}) }}
 
     # present = define the VM (stopped); running = also power it on.
     vm_state: present
@@ -121,11 +156,15 @@
               - name: "{{ vm_nic_name }}"
                 interface: "{{ vm_nic_interface }}"
                 profile_name: "{{ vm_vnic_profile }}"
-            cd_iso: "{{ vm_iso_name if (vm_iso_name | length > 0) else omit }}"
-            boot_devices: "{{ ['cdrom', 'hd'] if (vm_iso_name | length > 0) else ['hd'] }}"
+            cd_iso: "{{ vm_iso_name if (vm_iso_name | length > 0 and vm_template | length == 0) else omit }}"
+            boot_devices: "{{ ['cdrom', 'hd'] if (vm_iso_name | length > 0 and vm_template | length == 0) else ['hd'] }}"
+            cloud_init: "{{ vm_cloud_init_data if (vm_cloud_init | bool) else omit }}"
             state: present
           register: olvm_vm_result
+          no_log: "{{ vm_cloud_init | bool }}"
 
+        # Blank VMs need a fresh bootable disk. Template clones already carry the
+        # template's system disk, so skip this step when cloning.
         - name: "Create and attach the {{ vm_disk_size }} system disk"
           ovirt.ovirt.ovirt_disk:
             auth: "{{ olvm_api_auth }}"
@@ -138,28 +177,33 @@
             bootable: true
             state: present
           register: olvm_vm_disk_result
+          when: vm_template | length == 0
 
         - name: "Set the VM power state to {{ vm_state }}"
           ovirt.ovirt.ovirt_vm:
             auth: "{{ olvm_api_auth }}"
             name: "{{ vm_name }}"
             cluster: "{{ vm_cluster }}"
-            cd_iso: "{{ vm_iso_name if (vm_iso_name | length > 0) else omit }}"
+            cd_iso: "{{ vm_iso_name if (vm_iso_name | length > 0 and vm_template | length == 0) else omit }}"
+            cloud_init: "{{ vm_cloud_init_data if (vm_cloud_init | bool) else omit }}"
             state: "{{ vm_state }}"
           register: olvm_vm_power_result
+          no_log: "{{ vm_cloud_init | bool }}"
 
         - name: Show the VM configuration summary
           ansible.builtin.debug:
             msg:
               - "==================== CREATE VM SUMMARY ====================="
               - "VM               : {{ vm_name }} (cluster {{ vm_cluster }})"
+              - "Source           : {{ ('template ' + vm_template) if (vm_template | length > 0) else 'Blank template' }}"
               - "vCPUs / memory   : {{ vm_cpu_sockets }}x{{ vm_cpu_cores }} / {{ vm_memory }}"
-              - "System disk      : {{ vm_name }}-disk0 {{ vm_disk_size }} ({{ vm_disk_format }}, {{ vm_disk_interface }}) on {{ vm_storage_domain }}"
+              - "System disk      : {{ (vm_name + '-disk0 ' + vm_disk_size + ' (' + vm_disk_format + ', ' + vm_disk_interface + ') on ' + vm_storage_domain) if (vm_template | length == 0) else 'cloned from template ' + vm_template }}"
               - "NIC              : {{ vm_nic_name }} -> vNIC profile {{ vm_vnic_profile }}"
-              - "Install ISO      : {{ vm_iso_name if (vm_iso_name | length > 0) else '(none - blank disk)' }}"
+              - "Install ISO      : {{ vm_iso_name if (vm_iso_name | length > 0 and vm_template | length == 0) else '(none)' }}"
+              - "Cloud-init       : {{ ('on -> host ' + (vm_cloud_init_host_name | default('') if (vm_cloud_init_host_name | length > 0) else vm_name)) if (vm_cloud_init | bool) else 'off' }}"
               - "Power state      : {{ vm_state }}{{ ' (changed)' if (olvm_vm_power_result is changed) else '' }}"
               - "==========================================================="
-              - "Open a console from Compute > Virtual Machines to install the OS."
+              - "{{ 'Cloud-init runs on first boot (hostname / user / SSH keys).' if (vm_cloud_init | bool) else 'Open a console from Compute > Virtual Machines to install the OS.' }}"
               - "==========================================================="
 
       always:

@@ -1,0 +1,19 @@
+---
+# k8s_common - prepares every node (control plane and worker) so kubeadm can run:
+# preflight checks, OS prep (swap/SELinux/kernel/sysctl), containerd runtime,
+# Kubernetes packages, and firewalld rules.
+
+- name: Preflight checks
+  ansible.builtin.import_tasks: 01_preflight.yml
+
+- name: System preparation (swap, SELinux, kernel, sysctl)
+  ansible.builtin.import_tasks: 02_system_prep.yml
+
+- name: Install and configure containerd
+  ansible.builtin.import_tasks: 03_containerd.yml
+
+- name: Install Kubernetes packages
+  ansible.builtin.import_tasks: 04_kubernetes_packages.yml
+
+- name: Configure firewalld
+  ansible.builtin.import_tasks: 05_firewall.yml

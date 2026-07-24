@@ -1,0 +1,45 @@
+---
+# 05 - Open the Kubernetes ports in firewalld. OCI already trusts intra-VCN
+# traffic at the security-list level, so this is host-level defense in depth.
+# Ports opened depend on the node's role (control plane vs worker); Calico
+# overlay ports are opened on every node.
+
+- name: Check whether firewalld is running
+  ansible.builtin.service_facts:
+
+- name: Configure firewalld rules
+  when: "'firewalld.service' in ansible_facts.services and ansible_facts.services['firewalld.service'].state == 'running'"
+  block:
+    - name: Trust all traffic from within the cluster network (node-to-node)
+      ansible.posix.firewalld:
+        source: "{{ cluster_network_cidr }}"
+        zone: trusted
+        state: enabled
+        permanent: true
+        immediate: true
+
+    - name: Open control-plane ports
+      ansible.posix.firewalld:
+        port: "{{ item.port }}/{{ item.proto }}"
+        permanent: true
+        immediate: true
+        state: enabled
+      loop: "{{ k8s_control_plane_ports }}"
+      when: inventory_hostname in groups['k8s_control_plane'] | default([])
+
+    - name: Open worker-node ports
+      ansible.posix.firewalld:
+        port: "{{ item.port }}/{{ item.proto }}"
+        permanent: true
+        immediate: true
+        state: enabled
+      loop: "{{ k8s_worker_ports }}"
+      when: inventory_hostname in groups['k8s_workers'] | default([])
+
+    - name: Open Calico overlay ports on every node
+      ansible.posix.firewalld:
+        port: "{{ item.port }}/{{ item.proto }}"
+        permanent: true
+        immediate: true
+        state: enabled
+      loop: "{{ k8s_calico_ports }}"

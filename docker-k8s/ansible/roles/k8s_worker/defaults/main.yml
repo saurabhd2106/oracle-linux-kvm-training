@@ -1,0 +1,13 @@
+---
+# Defaults for k8s_worker.
+
+# Marker file created by a successful join; used for idempotency.
+kubelet_conf: "/etc/kubernetes/kubelet.conf"
+
+# Path to the control plane's admin kubeconfig (on the control-plane host), used
+# to mint a join token and to verify the worker registers.
+control_plane_admin_conf: "/etc/kubernetes/admin.conf"
+
+# How long to wait for the worker node to reach Ready (checked from the control
+# plane).
+worker_ready_timeout: "300s"

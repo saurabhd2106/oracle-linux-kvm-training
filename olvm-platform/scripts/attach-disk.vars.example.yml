@@ -1,0 +1,23 @@
+---
+# Example variables file for attach-disk.yml. Copy or edit, then pass it with:
+#
+#   cd olvm-platform/ansible
+#   ansible-playbook ../scripts/attach-disk.yml -e @../scripts/attach-disk.vars.example.yml
+#
+# vm_name and disk_name are required; everything else has a lab default.
+
+# --- Required ----------------------------------------------------------------
+# VM to attach the disk to.
+vm_name: lab-vm-01
+
+# Name of the disk (unique). A convention like <vm>-data1 keeps it tidy.
+disk_name: lab-vm-01-data1
+
+# --- Optional overrides (defaults shown) -------------------------------------
+# disk_size: 20GiB
+# disk_format: cow            # cow (thin) or raw (preallocated)
+# disk_interface: virtio_scsi
+# disk_storage_domain: olvm-data
+# disk_bootable: false
+# Hot-plug into a running guest (set false to attach to a stopped VM only).
+# disk_activate: true

@@ -1,0 +1,57 @@
+---
+# Defaults for k8s_common. Cluster-wide values (versions, CIDRs) live in
+# inventory/group_vars/all.yml; these are role-local knobs that rarely change.
+
+# Minimum host requirements enforced by 01_preflight. kubeadm itself requires
+# >= 2 vCPU and >= 1700 MB on the control plane; 2 GB is the documented minimum.
+k8s_min_cpus: 2
+k8s_min_mem_mb: 1700
+k8s_min_ol_version: "9"
+
+# --- Container runtime ------------------------------------------------------
+# Docker CE repo provides containerd.io on Oracle Linux 9.
+docker_ce_repo_url: "https://download.docker.com/linux/centos/docker-ce.repo"
+containerd_config_path: "/etc/containerd/config.toml"
+
+# --- Kubernetes repo --------------------------------------------------------
+# Community-maintained per-minor RPM repo. {{ kubernetes_version }} is set in
+# group_vars/all.yml (for example "1.36").
+k8s_repo_baseurl: "https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/rpm/"
+k8s_repo_gpgkey: "https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/rpm/repodata/repomd.xml.key"
+
+k8s_packages:
+  - kubelet
+  - kubeadm
+  - kubectl
+
+# Kernel modules and sysctls required by the kubelet / CNI networking.
+k8s_kernel_modules:
+  - overlay
+  - br_netfilter
+
+k8s_sysctls:
+  - { key: "net.bridge.bridge-nf-call-iptables", value: "1" }
+  - { key: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
+  - { key: "net.ipv4.ip_forward", value: "1" }
+
+# --- Firewall ---------------------------------------------------------------
+# Ports opened in firewalld per node role. In-VCN traffic is already trusted by
+# the OCI security list; these rules add host-level defense in depth. See
+# https://kubernetes.io/docs/reference/networking/ports-and-protocols/
+k8s_control_plane_ports:
+  - { port: 6443, proto: tcp }    # kube-apiserver
+  - { port: 2379, proto: tcp }    # etcd client
+  - { port: 2380, proto: tcp }    # etcd peer
+  - { port: 10250, proto: tcp }   # kubelet API
+  - { port: 10257, proto: tcp }   # kube-controller-manager
+  - { port: 10259, proto: tcp }   # kube-scheduler
+
+k8s_worker_ports:
+  - { port: 10250, proto: tcp }          # kubelet API
+  - { port: 10256, proto: tcp }          # kube-proxy health
+  - { port: "30000-32767", proto: tcp }  # NodePort services
+
+# Calico overlay ports opened on every node.
+k8s_calico_ports:
+  - { port: 4789, proto: udp }    # Calico VXLAN
+  - { port: 5473, proto: tcp }    # Calico Typha

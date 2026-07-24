@@ -5,6 +5,12 @@
 # Directory exported over NFS and later added as an OLVM storage domain.
 nfs_export_path: /exports/olvm
 
+# Second export directory, added as an OLVM ISO storage domain (Phase 2). It
+# lives beside the data export and reuses the same NFS server/volume - no extra
+# Terraform host is needed. Set nfs_configure_iso_export: false to skip it.
+nfs_configure_iso_export: true
+nfs_iso_export_path: /exports/olvm-iso
+
 # Block device to format and mount. Empty => auto-detect the extra data volume
 # attached by Terraform (first unpartitioned, non-boot disk; typically /dev/sdb).
 nfs_data_device: ""

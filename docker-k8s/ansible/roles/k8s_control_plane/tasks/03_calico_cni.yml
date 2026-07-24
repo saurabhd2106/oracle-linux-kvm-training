@@ -1,0 +1,62 @@
+---
+# 03 - Install Calico via the Tigera operator: CRDs, then the operator, then a
+# templated Installation custom resource (VXLAN, our pod CIDR). All kubectl calls
+# use root's kubeconfig staged in 02. `kubectl apply` is idempotent.
+
+- name: Stage directory for Calico manifests
+  ansible.builtin.file:
+    path: "{{ calico_manifest_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Apply the Calico CRDs
+  ansible.builtin.command: "kubectl apply --server-side -f {{ calico_crds_url }}"
+  environment:
+    KUBECONFIG: "{{ kubeadm_admin_conf }}"
+  register: calico_crds
+  changed_when: "'created' in calico_crds.stdout or 'configured' in calico_crds.stdout"
+
+- name: Apply the Tigera operator
+  ansible.builtin.command: "kubectl apply --server-side -f {{ calico_operator_url }}"
+  environment:
+    KUBECONFIG: "{{ kubeadm_admin_conf }}"
+  register: calico_operator
+  changed_when: "'created' in calico_operator.stdout or 'configured' in calico_operator.stdout"
+
+- name: Wait for the Tigera operator deployment to be available
+  ansible.builtin.command: >-
+    kubectl wait --namespace tigera-operator
+    --for=condition=Available deployment/tigera-operator
+    --timeout={{ calico_ready_timeout }}
+  environment:
+    KUBECONFIG: "{{ kubeadm_admin_conf }}"
+  changed_when: false
+
+- name: Render the Calico Installation custom resource
+  ansible.builtin.template:
+    src: calico-installation.yaml.j2
+    dest: "{{ calico_manifest_dir }}/installation.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Apply the Calico Installation custom resource
+  ansible.builtin.command: "kubectl apply -f {{ calico_manifest_dir }}/installation.yaml"
+  environment:
+    KUBECONFIG: "{{ kubeadm_admin_conf }}"
+  register: calico_install
+  changed_when: "'created' in calico_install.stdout or 'configured' in calico_install.stdout"
+
+- name: Wait for Calico to report the whole cluster is available
+  ansible.builtin.command: >-
+    kubectl wait --for=condition=Ready tigerastatus/calico
+    --timeout={{ calico_ready_timeout }}
+  environment:
+    KUBECONFIG: "{{ kubeadm_admin_conf }}"
+  register: calico_status
+  changed_when: false
+  retries: 3
+  delay: 10
+  until: calico_status.rc == 0

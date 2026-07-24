@@ -7,13 +7,17 @@
     name: nfs-utils
     state: present
 
-- name: Publish the OLVM export in /etc/exports.d
+- name: Publish the OLVM export(s) in /etc/exports.d
   ansible.builtin.copy:
     dest: /etc/exports.d/olvm.exports
     owner: root
     group: root
     mode: "0644"
-    content: "{{ nfs_export_path }} {{ nfs_allowed_clients }}({{ nfs_export_options }})\n"
+    content: |
+      {{ nfs_export_path }} {{ nfs_allowed_clients }}({{ nfs_export_options }})
+      {% if nfs_configure_iso_export | bool %}
+      {{ nfs_iso_export_path }} {{ nfs_allowed_clients }}({{ nfs_export_options }})
+      {% endif %}
   notify: Reload nfs exports
 
 - name: Enable and start the NFS server

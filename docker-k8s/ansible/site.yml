@@ -1,0 +1,46 @@
+---
+# End-to-end Kubernetes cluster build with kubeadm. Run after the Terraform stack
+# in ../terraform is up and inventory/hosts.yml is populated with the VM IPs.
+#
+# Topology: 1 control plane + 1 worker node (Kubernetes v1.36, containerd
+# runtime, Calico CNI). Terminology throughout is "control plane" and
+# "worker node".
+#
+# Order matters:
+#   1. k8s_common          - prepares every node (runtime, packages, sysctl,
+#                            firewall). Must run on all nodes first.
+#   2. k8s_control_plane   - kubeadm init on the control plane, installs Calico.
+#   3. k8s_worker          - joins the worker node using a token minted on the
+#                            control plane (so the control plane must be up).
+#
+# Run everything:      ansible-playbook site.yml
+# Prepare only:        ansible-playbook site.yml --tags common
+# Control plane only:  ansible-playbook site.yml --limit k8s_control_plane
+# Worker only:         ansible-playbook site.yml --limit k8s_workers --tags worker
+
+- name: Prepare every node for Kubernetes
+  hosts: k8s_control_plane:k8s_workers
+  become: true
+  gather_facts: true
+  tags:
+    - common
+  roles:
+    - k8s_common
+
+- name: Initialize the control plane and install the CNI
+  hosts: k8s_control_plane
+  become: true
+  gather_facts: true
+  tags:
+    - control_plane
+  roles:
+    - k8s_control_plane
+
+- name: Join the worker node to the cluster
+  hosts: k8s_workers
+  become: true
+  gather_facts: true
+  tags:
+    - worker
+  roles:
+    - k8s_worker

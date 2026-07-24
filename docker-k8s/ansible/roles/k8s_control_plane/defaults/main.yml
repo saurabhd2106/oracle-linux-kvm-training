@@ -1,0 +1,20 @@
+---
+# Defaults for k8s_control_plane. Versions and CIDRs come from
+# inventory/group_vars/all.yml.
+
+kubeadm_config_path: "/etc/kubernetes/kubeadm-config.yaml"
+kubeadm_admin_conf: "/etc/kubernetes/admin.conf"
+
+# Directory where the templated Calico manifests are staged before applying.
+calico_manifest_dir: "/etc/kubernetes/calico"
+
+# Tigera operator + CRD manifests for the pinned Calico release.
+calico_crds_url: "https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/v1_crd_projectcalico_org.yaml"
+calico_operator_url: "https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/tigera-operator.yaml"
+
+# User on the node that gets a working kubeconfig (~/.kube/config).
+kubeconfig_user: "opc"
+
+# How long to wait for the control-plane node and Calico to become Ready.
+node_ready_timeout: "300s"
+calico_ready_timeout: "300s"

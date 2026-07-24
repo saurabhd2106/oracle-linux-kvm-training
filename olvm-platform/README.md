@@ -109,8 +109,10 @@ ansible-playbook site.yml --limit engine --tags olvm_config
 Data Center and Cluster default to `olvm-lab-dc` / `olvm-lab-cluster` (override
 with `olvm_datacenter_name` / `olvm_cluster_name`); on first run the role renames
 the built-in `Default` objects in place. Hosts are added by reusing the
-Engine SSH key authorized by `olvm_host_prep`, and the storage domain points at
-`<nfs_private_ip>:/exports/olvm`.
+Engine SSH key authorized by `olvm_host_prep`, the data storage domain points at
+`<nfs_private_ip>:/exports/olvm`, and a Phase 2 ISO domain (`olvm-iso`) points at
+`<nfs_private_ip>:/exports/olvm-iso` (disable with `olvm_configure_iso_domain:
+false`).
 
 You can still do this by hand in the Admin Portal as a fallback: Compute > Hosts
 > New (add each KVM host by its private IP), then Storage > Domains > New Domain
@@ -120,9 +122,10 @@ You can still do this by hand in the Admin Portal as a fallback: Compute > Hosts
 
 Once the platform is configured, the standalone helpers in
 [`scripts/`](scripts/README.md) drive the common day-2 tasks through the Engine
-API: `upload-disk.yml` (upload an ISO/image), `create-vm.yml` (create a VM with
-a disk + NIC, optionally booting an ISO), `vm-snapshot.yml` (create/restore/
-delete snapshots) and `vm-migrate.yml` (live-migrate a VM between hosts).
+API: `upload-disk.yml` (upload an ISO/image to the `olvm-iso` domain),
+`create-vm.yml` (create a VM from Blank+ISO or clone a template with cloud-init),
+`vm-snapshot.yml` (create/restore/delete snapshots) and `vm-migrate.yml`
+(live-migrate a VM between hosts).
 
 ```sh
 cd ansible
@@ -133,6 +136,19 @@ ansible-playbook ../scripts/create-vm.yml \
   -e vm_name=lab-vm-01 -e vm_iso_name='OracleLinux-R9-U7-x86_64-dvd.iso' -e vm_state=running
 ansible-playbook ../scripts/vm-snapshot.yml -e vm_name=lab-vm-01 -e snapshot_description=baseline
 ansible-playbook ../scripts/vm-migrate.yml  -e vm_name=lab-vm-01 -e migrate_to_host=olvm-kvm-02
+```
+
+Phase 2 adds a golden-image workflow and further day-2 ops: `create-template.yml`
+(seal a VM into a template), template clones with cloud-init via `create-vm.yml`,
+`attach-disk.yml` (hot-plug data disks), `export-ova.yml` (OVA backups) and
+`affinity-group.yml` (VM placement). See [`scripts/README.md`](scripts/README.md).
+
+```sh
+# seal lab-vm-01 into a template, then clone customized VMs from it
+ansible-playbook ../scripts/create-template.yml -e template_name=ol9-base -e template_vm=lab-vm-01
+ansible-playbook ../scripts/create-vm.yml \
+  -e vm_name=lab-clone-01 -e vm_template=ol9-base \
+  -e vm_cloud_init=true -e vm_cloud_init_host_name=lab-clone-01 -e vm_state=running
 ```
 
 ## Internal ports enabled for machine-to-machine communication

@@ -1,0 +1,121 @@
+---
+# Manage an OLVM VM affinity group through the Engine REST API
+# (ovirt.ovirt.ovirt_affinity_group) - the automated equivalent of Compute >
+# Clusters > <cluster> > Affinity Groups in the Admin Portal. Affinity groups
+# control VM placement across hosts: negative affinity keeps VMs apart (HA
+# pairs on different hosts), positive keeps them together.
+#
+# Lab default: a NEGATIVE (soft) VM affinity group for lab-vm-01 + lab-vm-02 so
+# the scheduler spreads them across the two KVM hosts.
+#
+# Runs on the controller (connection: local) and talks to the Engine API, same
+# pattern as create-vm.yml / the olvm_config role.
+#
+# Run from the ansible project:
+#
+#   cd olvm-platform/ansible
+#   ansible-playbook ../scripts/affinity-group.yml -e affinity_group_name=lab-spread
+#   # or with a vars file (to set the VM list):
+#   ansible-playbook ../scripts/affinity-group.yml -e @../scripts/affinity-group.vars.example.yml
+
+- name: Manage an OLVM affinity group via the Engine API
+  hosts: engine
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+    # --- API connection (mirrors roles/olvm_config/defaults/main.yml) --------
+    olvm_api_url: "https://{{ ansible_host }}/ovirt-engine/api"
+    olvm_api_username: admin@ovirt@internalsso
+    olvm_api_insecure: true
+    olvm_api_ca_file: ""
+
+    # --- Affinity group definition (override with -e or a vars file) ---------
+    # affinity_group_name is REQUIRED.
+    affinity_cluster: olvm-lab-cluster
+    affinity_description: "Managed by affinity-group.yml"
+    affinity_state: present          # present | absent
+    # VM placement rule: negative (apart) | positive (together) | disabled.
+    affinity_vm_rule: negative
+    # Enforcing = hard rule (block if unsatisfiable). Soft (false) is safer for a
+    # small lab where only two hosts exist.
+    affinity_vm_enforcing: false
+    # Host placement rule (relative to any hosts listed). Left disabled by default.
+    affinity_host_rule: disabled
+    affinity_host_enforcing: false
+    # VMs and hosts assigned to the group (names). Default demonstrates spreading
+    # the two lab VMs; override in a vars file.
+    affinity_vms:
+      - lab-vm-01
+      - lab-vm-02
+    affinity_hosts: []
+
+  tasks:
+    - name: Validate the required inputs
+      ansible.builtin.assert:
+        that:
+          - affinity_group_name is defined
+          - affinity_group_name | length > 0
+          - affinity_state in ['present', 'absent']
+          - olvm_admin_password is defined
+          - olvm_admin_password | length > 0
+        fail_msg: >-
+          affinity-group.yml needs affinity_group_name, a valid affinity_state
+          (present|absent) and the vaulted olvm_admin_password (auto-loaded from
+          group_vars/engine). One of these is missing.
+        success_msg: "Affinity group inputs look valid."
+        quiet: true
+
+    - name: Manage the affinity group via the Engine API
+      block:
+        - name: Obtain an OLVM Engine API token
+          ovirt.ovirt.ovirt_auth:
+            url: "{{ olvm_api_url }}"
+            username: "{{ olvm_api_username }}"
+            password: "{{ olvm_admin_password }}"
+            insecure: "{{ olvm_api_insecure | bool }}"
+            ca_file: "{{ olvm_api_ca_file if (olvm_api_ca_file | length > 0) else omit }}"
+          register: olvm_auth_login
+          no_log: true
+
+        - name: Store the API session as an explicit variable
+          ansible.builtin.set_fact:
+            olvm_api_auth: "{{ olvm_auth_login.ansible_facts.ovirt_auth }}"
+          no_log: true
+
+        - name: "Ensure affinity group {{ affinity_group_name }} is {{ affinity_state }}"
+          ovirt.ovirt.ovirt_affinity_group:
+            auth: "{{ olvm_api_auth }}"
+            name: "{{ affinity_group_name }}"
+            cluster: "{{ affinity_cluster }}"
+            description: "{{ affinity_description }}"
+            state: "{{ affinity_state }}"
+            vm_rule: "{{ affinity_vm_rule }}"
+            vm_enforcing: "{{ affinity_vm_enforcing | bool }}"
+            host_rule: "{{ affinity_host_rule }}"
+            host_enforcing: "{{ affinity_host_enforcing | bool }}"
+            vms: "{{ affinity_vms if (affinity_vms | length > 0) else omit }}"
+            hosts: "{{ affinity_hosts if (affinity_hosts | length > 0) else omit }}"
+          register: olvm_affinity_result
+
+        - name: Show the affinity group summary
+          ansible.builtin.debug:
+            msg:
+              - "================== AFFINITY GROUP SUMMARY =================="
+              - "Group            : {{ affinity_group_name }} (cluster {{ affinity_cluster }})"
+              - "State            : {{ affinity_state }}"
+              - "VM rule          : {{ affinity_vm_rule }} ({{ 'hard' if (affinity_vm_enforcing | bool) else 'soft' }})"
+              - "VMs              : {{ affinity_vms | join(', ') if (affinity_vms | length > 0) else '(none)' }}"
+              - "Host rule        : {{ affinity_host_rule }} ({{ 'hard' if (affinity_host_enforcing | bool) else 'soft' }})"
+              - "Changed          : {{ olvm_affinity_result is changed }}"
+              - "==========================================================="
+
+      always:
+        - name: Revoke the Engine API token
+          ovirt.ovirt.ovirt_auth:
+            state: absent
+            ovirt_auth: "{{ olvm_api_auth | default(omit) }}"
+          when: olvm_api_auth is defined and (olvm_api_auth.token | default('')) | length > 0
+          no_log: true

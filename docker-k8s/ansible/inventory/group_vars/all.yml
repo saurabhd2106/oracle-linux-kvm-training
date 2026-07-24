@@ -1,0 +1,42 @@
+---
+# Cluster-wide settings shared by every node. Pin all versions here so an upgrade
+# is a one-line change. Values researched against the latest stable releases as
+# of July 2026.
+
+# --- Kubernetes -------------------------------------------------------------
+# Minor version stream used for the pkgs.k8s.io RPM repo and installed packages.
+# The repo at pkgs.k8s.io is per-minor, so this drives both the repo URL and the
+# kubeadm/kubelet/kubectl packages. Latest stable minor is 1.36 (patch 1.36.2).
+kubernetes_version: "1.36"
+
+# Optional exact package version to pin (for example "1.36.2"). Leave empty to
+# install the latest patch available in the v{{ kubernetes_version }} repo.
+kubernetes_package_version: ""
+
+# --- Container runtime ------------------------------------------------------
+# containerd.io comes from the Docker CE repo. The sandbox (pause) image must
+# match what this Kubernetes minor expects; kubeadm sets it in the cluster
+# config, and containerd is aligned to the same value to avoid a version mismatch
+# warning. Bump alongside kubernetes_version when needed.
+pause_image: "registry.k8s.io/pause:3.10.1"
+
+# --- Cluster networking -----------------------------------------------------
+# Calico default pod CIDR. 192.168.0.0/16 does not overlap the OCI VCN
+# (10.0.0.0/16), so no route conflicts on the node network.
+pod_network_cidr: "192.168.0.0/16"
+service_cidr: "10.96.0.0/12"
+
+# Calico CNI release installed via the Tigera operator manifests. Latest is
+# v3.32.1 as of July 2026.
+calico_version: "v3.32.1"
+
+# Encapsulation for the Calico IP pool. VXLAN is the safest default on OCI
+# because the VCN does not run BGP and drops unknown (IPIP) protocols; VXLAN is
+# plain UDP/4789 which the VCN forwards. Valid: VXLAN, VXLANCrossSubnet.
+calico_encapsulation: "VXLANCrossSubnet"
+
+# --- Node network -----------------------------------------------------------
+# CIDR trusted for all in-cluster (node-to-node) traffic. Matches the VCN so
+# control-plane, etcd, kubelet and Calico overlay traffic between nodes is
+# allowed through firewalld. Keep in sync with the Terraform vcn_cidr_block.
+cluster_network_cidr: "10.0.0.0/16"

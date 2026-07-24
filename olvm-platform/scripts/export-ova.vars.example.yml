@@ -1,0 +1,24 @@
+---
+# Example variables file for export-ova.yml. Copy or edit, then pass it with:
+#
+#   cd olvm-platform/ansible
+#   ansible-playbook ../scripts/export-ova.yml -e @../scripts/export-ova.vars.example.yml
+#
+# vm_name is required; everything else has a lab default.
+
+# --- Required ----------------------------------------------------------------
+# VM to export. Stop it first for a clean, smaller OVA.
+vm_name: lab-vm-01
+
+# --- Optional overrides (defaults shown) -------------------------------------
+# KVM host that performs the export (defaults to the first host in kvm_hosts).
+# ova_host: olvm-kvm-01
+
+# Directory on ova_host the OVA is written to (needs room for the VM's disks).
+# ova_directory: /var/tmp/olvm-ova
+
+# Output file name.
+# ova_filename: lab-vm-01.ova
+
+# Export a running VM (uses a snapshot). Default false requires the VM to be Down.
+# ova_from_running: false

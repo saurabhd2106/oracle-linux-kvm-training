@@ -1,0 +1,132 @@
+---
+# Seal a stopped VM into an OLVM template through the Engine REST API
+# (ovirt.ovirt.ovirt_template) - the automated equivalent of right-click > Make
+# Template in the Admin Portal. A template is the golden image labs are cloned
+# from with scripts/create-vm.yml (vm_template=...) plus cloud-init.
+#
+# Golden-image workflow (Phase 2):
+#   1. create-vm.yml + an ISO (Phase 1) -> install and customize the OS
+#   2. inside the guest: install cloud-init + the oVirt guest agent, then run
+#      `cloud-init clean` / `sys-unconfig` so clones re-init cleanly
+#   3. stop the VM (ovirt_vm state=stopped or from the portal)
+#   4. this playbook -> seal it into a template
+#   5. create-vm.yml -e vm_template=<name> -e vm_cloud_init=true -> clone labs
+#
+# Runs on the controller (connection: local) and talks to the Engine API, same
+# pattern as create-vm.yml / the olvm_config role.
+#
+# Run from the ansible project:
+#
+#   cd olvm-platform/ansible
+#   ansible-playbook ../scripts/create-template.yml \
+#     -e template_name=ol9-base -e template_vm=lab-vm-01
+#   # or with a vars file:
+#   ansible-playbook ../scripts/create-template.yml -e @../scripts/create-template.vars.example.yml
+
+- name: Create an OLVM template from a stopped VM via the Engine API
+  hosts: engine
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+    # --- API connection (mirrors roles/olvm_config/defaults/main.yml) --------
+    olvm_api_url: "https://{{ ansible_host }}/ovirt-engine/api"
+    olvm_api_username: admin@ovirt@internalsso
+    olvm_api_insecure: true
+    olvm_api_ca_file: ""
+
+    # --- Template definition (override with -e or a vars file) ---------------
+    # template_name and template_vm are REQUIRED.
+    template_cluster: olvm-lab-cluster
+    template_description: "Golden image sealed by create-template.yml"
+    # Allow taking the template from a running VM (a memory snapshot is used).
+    # Default false: stop the VM first for a clean, minimal-size template.
+    template_from_running: false
+
+  tasks:
+    - name: Validate the required inputs
+      ansible.builtin.assert:
+        that:
+          - template_name is defined
+          - template_name | length > 0
+          - template_vm is defined
+          - template_vm | length > 0
+          - olvm_admin_password is defined
+          - olvm_admin_password | length > 0
+        fail_msg: >-
+          create-template.yml needs template_name and template_vm (the source
+          VM) and the vaulted olvm_admin_password (auto-loaded from
+          group_vars/engine). One of these is missing.
+        success_msg: "Template inputs look valid."
+        quiet: true
+
+    - name: Create the template via the Engine API
+      block:
+        - name: Obtain an OLVM Engine API token
+          ovirt.ovirt.ovirt_auth:
+            url: "{{ olvm_api_url }}"
+            username: "{{ olvm_api_username }}"
+            password: "{{ olvm_admin_password }}"
+            insecure: "{{ olvm_api_insecure | bool }}"
+            ca_file: "{{ olvm_api_ca_file if (olvm_api_ca_file | length > 0) else omit }}"
+          register: olvm_auth_login
+          no_log: true
+
+        - name: Store the API session as an explicit variable
+          ansible.builtin.set_fact:
+            olvm_api_auth: "{{ olvm_auth_login.ansible_facts.ovirt_auth }}"
+          no_log: true
+
+        - name: "Look up the source VM {{ template_vm }}"
+          ovirt.ovirt.ovirt_vm_info:
+            auth: "{{ olvm_api_auth }}"
+            pattern: "name={{ template_vm }}"
+          register: olvm_template_source
+
+        - name: Confirm the source VM exists and (unless allowed) is stopped
+          ansible.builtin.assert:
+            that:
+              - olvm_template_source.ovirt_vms | default([]) | length > 0
+              - (template_from_running | bool) or (olvm_template_source.ovirt_vms[0].status == 'down')
+            fail_msg: >-
+              {{ template_vm }} must exist and be Down to seal a clean template
+              (current status:
+              {{ olvm_template_source.ovirt_vms[0].status | default('not found') }}).
+              Stop the VM first, or pass -e template_from_running=true to template
+              a running VM.
+            success_msg: "Source VM {{ template_vm }} is ready to seal."
+            quiet: true
+
+        - name: "Seal {{ template_vm }} into template {{ template_name }}"
+          ovirt.ovirt.ovirt_template:
+            auth: "{{ olvm_api_auth }}"
+            name: "{{ template_name }}"
+            vm: "{{ template_vm }}"
+            cluster: "{{ template_cluster }}"
+            description: "{{ template_description }}"
+            state: present
+          register: olvm_template_result
+
+        - name: Show the template summary
+          ansible.builtin.debug:
+            msg:
+              - "=================== CREATE TEMPLATE SUMMARY ================"
+              - "Template         : {{ template_name }} (cluster {{ template_cluster }})"
+              - "Sealed from VM   : {{ template_vm }}"
+              - "Changed          : {{ olvm_template_result is changed }}"
+              - "==========================================================="
+              - "Clone labs from it with:"
+              - "  ansible-playbook ../scripts/create-vm.yml \\"
+              - "    -e vm_name=lab-clone-01 -e vm_template={{ template_name }} \\"
+              - "    -e vm_cloud_init=true -e vm_cloud_init_host_name=lab-clone-01"
+              - "==========================================================="
+
+      always:
+        - name: Revoke the Engine API token
+          ovirt.ovirt.ovirt_auth:
+            state: absent
+            ovirt_auth: "{{ olvm_api_auth | default(omit) }}"
+          when: olvm_api_auth is defined and (olvm_api_auth.token | default('')) | length > 0
+          no_log: true

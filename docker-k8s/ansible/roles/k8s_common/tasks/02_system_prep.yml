@@ -1,0 +1,62 @@
+---
+# 02 - OS-level prerequisites for the kubelet: swap off, SELinux permissive,
+# bridge/overlay kernel modules, and the netfilter/forwarding sysctls. These are
+# mandatory kubeadm requirements (see the "Installing kubeadm" docs).
+
+- name: Disable swap at runtime
+  ansible.builtin.command: swapoff -a
+  changed_when: ansible_facts['swaptotal_mb'] | int > 0
+
+- name: Remove swap entries from /etc/fstab so it stays off after reboot
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^([^#].*\s+swap\s+.*)$'
+    replace: '# \1  # disabled for Kubernetes'
+
+# The kubelet does not support SELinux enforcing with the current container
+# runtime setup; the kubeadm docs set it to permissive. This survives reboot via
+# the config file, and is applied live with setenforce.
+- name: Set SELinux to permissive at runtime
+  ansible.posix.selinux:
+    policy: targeted
+    state: permissive
+
+- name: Persist SELinux permissive in /etc/selinux/config
+  ansible.builtin.lineinfile:
+    path: /etc/selinux/config
+    regexp: '^SELINUX='
+    line: 'SELINUX=permissive'
+
+- name: Persist required kernel modules
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: "{{ k8s_kernel_modules | join('\n') }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Load required kernel modules now
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ k8s_kernel_modules }}"
+
+- name: Persist Kubernetes sysctl settings
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-kubernetes.conf
+    content: |
+      {% for s in k8s_sysctls %}
+      {{ s.key }} = {{ s.value }}
+      {% endfor %}
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Apply sysctl settings now
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-kubernetes.conf
+    reload: true
+    state: present
+  loop: "{{ k8s_sysctls }}"

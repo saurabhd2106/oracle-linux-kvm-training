@@ -1,0 +1,27 @@
+#jinja2: trim_blocks: True, lstrip_blocks: True
+# Managed by Ansible (k8s_control_plane). kubeadm ClusterConfiguration for a
+# single control-plane cluster. API version v1beta4 (Kubernetes 1.31+).
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+localAPIEndpoint:
+  # Advertise the VCN private IP so intra-cluster traffic stays internal.
+  advertiseAddress: "{{ node_ip }}"
+  bindPort: 6443
+nodeRegistration:
+  criSocket: "unix:///run/containerd/containerd.sock"
+  kubeletExtraArgs:
+    - name: node-ip
+      value: "{{ node_ip }}"
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+kubernetesVersion: "{{ kubeadm_version }}"
+networking:
+  podSubnet: "{{ pod_network_cidr }}"
+  serviceSubnet: "{{ service_cidr }}"
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+# Match containerd's SystemdCgroup = true.
+cgroupDriver: systemd

@@ -66,3 +66,12 @@
     owner: "{{ nfs_owner_uid }}"
     group: "{{ nfs_owner_gid }}"
     mode: "0755"
+
+- name: Ensure the ISO export directory exists (Phase 2)
+  ansible.builtin.file:
+    path: "{{ nfs_iso_export_path }}"
+    state: directory
+    owner: "{{ nfs_owner_uid }}"
+    group: "{{ nfs_owner_gid }}"
+    mode: "0755"
+  when: nfs_configure_iso_export | bool

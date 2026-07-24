@@ -7,11 +7,15 @@ project's inventory, vault and SSH key but are intentionally **not** part of
 | Helper | Purpose |
 |--------|---------|
 | `upload-disk.yml` | Upload a disk image / ISO to a storage domain (runs on the Engine) |
-| `create-vm.yml` | Create a VM from Blank with a disk + NIC, optionally booting an ISO |
+| `create-vm.yml` | Create a VM from Blank (ISO install) or clone a template with cloud-init |
+| `create-template.yml` | Seal a stopped golden VM into a reusable template (Phase 2) |
+| `attach-disk.yml` | Create and attach / hot-plug an extra data disk (Phase 2) |
 | `vm-snapshot.yml` | Create / restore / delete a VM snapshot |
 | `vm-migrate.yml` | Live-migrate a running VM between KVM hosts |
+| `export-ova.yml` | Export a VM to a portable OVA file backup (Phase 2) |
+| `affinity-group.yml` | Manage VM affinity groups to control host placement (Phase 2) |
 
-`create-vm.yml`, `vm-snapshot.yml` and `vm-migrate.yml` are pure Engine API
+All of these except `upload-disk.yml` are pure Engine API
 playbooks: like the `olvm_config` role they run on the controller
 (`connection: local`) and never SSH into the Engine. They target the `engine`
 inventory host only to reuse its `ansible_host` (the API endpoint) and the
@@ -22,7 +26,21 @@ the `olvm_config` role needs (see [`../ansible/README.md`](../ansible/README.md)
 
 Prerequisite for all VM helpers: the platform is configured (`site.yml` /
 `olvm_config`) so the Data Center, cluster, an Up host, the `olvm-data` storage
-domain and the `olvm-vm` vNIC profile exist.
+domain, the `olvm-iso` ISO domain and the `olvm-vm` vNIC profile exist.
+
+## Phase 2 golden-image workflow
+
+The Phase 2 helpers turn a one-off ISO install into a repeatable clone factory:
+
+```
+upload-disk.yml (ISO -> olvm-iso)
+   -> create-vm.yml (Blank + ISO)            # install & customize one VM
+   -> [in guest] install cloud-init + guest agent, then `cloud-init clean`
+   -> stop the VM
+   -> create-template.yml                    # seal it into a template
+   -> create-vm.yml -e vm_template=... -e vm_cloud_init=true   # clone many labs
+   -> attach-disk.yml / export-ova.yml / affinity-group.yml    # day-2 ops
+```
 
 ## upload-disk.yml - upload a disk image / ISO to a storage domain
 
@@ -64,7 +82,7 @@ A successful run prints the script's live progress and ends with
 |----------|----------|---------|---------|
 | `upload_disk_image_url` | yes | - | https URL the Engine downloads the image from |
 | `upload_disk_image_name` | yes | - | file name saved on the Engine and uploaded |
-| `upload_disk_sd_name` | no | `olvm_storage_domain_name` (`olvm-data`) | target storage domain |
+| `upload_disk_sd_name` | no | `olvm_iso_domain_name` (`olvm-iso`) | target storage domain (set `olvm-data` for a data-disk image) |
 | `upload_disk_format` | no | `raw` | disk format (`raw` for ISOs) |
 | `upload_disk_profile` | no | `OLVM-PROFILE` | connection profile name in `ovirt.conf` |
 | `upload_disk_run_user` | no | `opc` | user that owns the config and runs the upload |
@@ -105,11 +123,22 @@ ansible-playbook ../scripts/create-vm.yml \
   -e vm_iso_name='OracleLinux-R9-U7-x86_64-dvd.iso' \
   -e vm_state=running
 
+# clone a template and customize it on first boot with cloud-init (Phase 2)
+ansible-playbook ../scripts/create-vm.yml \
+  -e vm_name=lab-clone-01 \
+  -e vm_template=ol9-base \
+  -e vm_cloud_init=true \
+  -e vm_cloud_init_host_name=lab-clone-01 \
+  -e vm_state=running
+
 # or use the example vars file
 ansible-playbook ../scripts/create-vm.yml -e @../scripts/create-vm.vars.example.yml
 ```
 
 Open a console from Compute > Virtual Machines to complete the OS install.
+When cloning from a template, `vm_template`'s system disk is copied (no fresh
+disk is created and `vm_iso_name` is ignored), and cloud-init customizes the
+guest on first boot.
 
 ### Variables
 
@@ -126,8 +155,72 @@ Open a console from Compute > Virtual Machines to complete the OS install.
 | `vm_storage_domain` | no | `olvm-data` | disk storage domain |
 | `vm_nic_name` / `vm_nic_interface` | no | `nic1` / `virtio` | NIC name and model |
 | `vm_vnic_profile` | no | `olvm-vm` | vNIC profile to attach the NIC to |
-| `vm_iso_name` | no | `""` | uploaded ISO to boot (empty = blank disk) |
+| `vm_iso_name` | no | `""` | uploaded ISO to boot (ignored when cloning a template) |
+| `vm_template` | no | `""` | template to clone (empty = Blank); its disk is copied |
+| `vm_cloud_init` | no | `false` | initialize the guest on first boot (template clones) |
+| `vm_cloud_init_host_name` | no | `""` | hostname set by cloud-init |
+| `vm_cloud_init_user_name` | no | `""` | user created/configured by cloud-init |
+| `vm_cloud_init_root_password` | no | `""` | root password set by cloud-init |
+| `vm_cloud_init_ssh_keys` | no | `""` | authorized SSH public key(s) |
+| `vm_cloud_init_custom_script` | no | `""` | extra cloud-config appended by cloud-init |
+| `vm_cloud_init_nic_boot_protocol` | no | `dhcp` | `dhcp` or `static` for the NIC |
+| `vm_cloud_init_nic_ip_address` / `_netmask` / `_gateway` | no | `""` | static NIC address fields |
 | `vm_state` | no | `present` | `present` (stopped) or `running` |
+
+## create-template.yml - seal a golden VM into a template
+
+Turns a stopped, customized VM into a reusable template via `ovirt_template`, so
+labs can be cloned from it with `create-vm.yml -e vm_template=...`. Prepare the
+source VM first: install cloud-init and the oVirt guest agent, run
+`cloud-init clean` (or `sys-unconfig`), then stop the VM.
+
+### Run it
+
+```sh
+cd olvm-platform/ansible
+
+ansible-playbook ../scripts/create-template.yml \
+  -e template_name=ol9-base -e template_vm=lab-vm-01
+```
+
+### Variables
+
+| Variable | Required | Default | Purpose |
+|----------|----------|---------|---------|
+| `template_name` | yes | - | name of the template to create |
+| `template_vm` | yes | - | source VM to seal (should be Down) |
+| `template_cluster` | no | `olvm-lab-cluster` | target cluster |
+| `template_description` | no | (lab text) | description stored on the template |
+| `template_from_running` | no | `false` | allow sealing a running VM (memory snapshot) |
+
+## attach-disk.yml - add / hot-plug a data disk
+
+Creates a disk and attaches it to a VM with `ovirt_disk`; with `disk_activate`
+(default) it is hot-plugged into a running guest.
+
+### Run it
+
+```sh
+cd olvm-platform/ansible
+
+ansible-playbook ../scripts/attach-disk.yml \
+  -e vm_name=lab-vm-01 -e disk_name=lab-vm-01-data1 -e disk_size=50GiB
+```
+
+Then partition/format and mount the new device inside the guest.
+
+### Variables
+
+| Variable | Required | Default | Purpose |
+|----------|----------|---------|---------|
+| `vm_name` | yes | - | VM to attach the disk to |
+| `disk_name` | yes | - | disk name (unique) |
+| `disk_size` | no | `20GiB` | disk size |
+| `disk_format` | no | `cow` | `cow` (thin) or `raw` (preallocated) |
+| `disk_interface` | no | `virtio_scsi` | disk interface |
+| `disk_storage_domain` | no | `olvm-data` | storage domain for the disk |
+| `disk_bootable` | no | `false` | mark the disk bootable |
+| `disk_activate` | no | `true` | hot-plug into a running guest |
 
 ## vm-snapshot.yml - create / restore / delete a snapshot
 
@@ -191,3 +284,59 @@ ansible-playbook ../scripts/vm-migrate.yml -e vm_name=lab-vm-01 -e migrate_to_ho
 | `vm_name` | yes | - | running VM to migrate |
 | `migrate_to_host` | no | `""` | destination host name (empty = Engine chooses) |
 | `migrate_force` | no | `false` | force even if the VM is pinned / non-migratable |
+
+## export-ova.yml - back a VM up to an OVA file
+
+Exports a (stopped) VM to a portable `.ova` file on a KVM host using
+`ovirt_vm`'s `export_ova`. The host performs the export, so the OVA lands in a
+directory on that host; copy it off to keep the backup and re-import it later
+from Compute > Virtual Machines > Import.
+
+### Run it
+
+```sh
+cd olvm-platform/ansible
+
+# stop the VM first for a clean export, then:
+ansible-playbook ../scripts/export-ova.yml -e vm_name=lab-vm-01
+```
+
+### Variables
+
+| Variable | Required | Default | Purpose |
+|----------|----------|---------|---------|
+| `vm_name` | yes | - | VM to export |
+| `ova_host` | no | first `kvm_hosts` host | KVM host that performs the export |
+| `ova_directory` | no | `/var/tmp/olvm-ova` | directory on the host for the OVA |
+| `ova_filename` | no | `<vm_name>.ova` | output file name |
+| `ova_from_running` | no | `false` | export a running VM (uses a snapshot) |
+
+## affinity-group.yml - control VM placement
+
+Manages a cluster affinity group with `ovirt_affinity_group`. Negative affinity
+keeps VMs on different hosts (HA pairs), positive keeps them together. The lab
+default is a soft negative group spreading `lab-vm-01` and `lab-vm-02`.
+
+### Run it
+
+```sh
+cd olvm-platform/ansible
+
+ansible-playbook ../scripts/affinity-group.yml \
+  -e affinity_group_name=lab-spread \
+  -e @../scripts/affinity-group.vars.example.yml
+```
+
+### Variables
+
+| Variable | Required | Default | Purpose |
+|----------|----------|---------|---------|
+| `affinity_group_name` | yes | - | affinity group name |
+| `affinity_cluster` | no | `olvm-lab-cluster` | target cluster |
+| `affinity_state` | no | `present` | `present` or `absent` |
+| `affinity_vm_rule` | no | `negative` | `negative` / `positive` / `disabled` |
+| `affinity_vm_enforcing` | no | `false` | hard rule (block) vs soft preference |
+| `affinity_host_rule` | no | `disabled` | host placement rule |
+| `affinity_host_enforcing` | no | `false` | hard host rule vs soft |
+| `affinity_vms` | no | `[lab-vm-01, lab-vm-02]` | VMs in the group (use a vars file) |
+| `affinity_hosts` | no | `[]` | optional hosts to pin the group to |

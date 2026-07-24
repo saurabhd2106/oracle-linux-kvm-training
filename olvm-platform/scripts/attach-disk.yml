@@ -1,0 +1,126 @@
+---
+# Attach an extra data disk to an OLVM virtual machine through the Engine REST
+# API (ovirt.ovirt.ovirt_disk) - the automated equivalent of the VM's Disks tab
+# > New in the Admin Portal. Creates the disk if it does not exist and attaches
+# it to the VM; with disk_activate it is hot-plugged into a running guest.
+#
+# Runs on the controller (connection: local) and talks to the Engine API, same
+# pattern as create-vm.yml / the olvm_config role.
+#
+# Run from the ansible project:
+#
+#   cd olvm-platform/ansible
+#   # add and hot-plug a 50 GiB data disk to a running VM
+#   ansible-playbook ../scripts/attach-disk.yml \
+#     -e vm_name=lab-vm-01 -e disk_name=lab-vm-01-data1 -e disk_size=50GiB
+#   # or with a vars file:
+#   ansible-playbook ../scripts/attach-disk.yml -e @../scripts/attach-disk.vars.example.yml
+
+- name: Attach a data disk to an OLVM VM via the Engine API
+  hosts: engine
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+    # --- API connection (mirrors roles/olvm_config/defaults/main.yml) --------
+    olvm_api_url: "https://{{ ansible_host }}/ovirt-engine/api"
+    olvm_api_username: admin@ovirt@internalsso
+    olvm_api_insecure: true
+    olvm_api_ca_file: ""
+
+    # --- Disk definition (override with -e or a vars file) -------------------
+    # vm_name and disk_name are REQUIRED.
+    disk_size: 20GiB
+    disk_format: cow            # cow (thin) or raw (preallocated)
+    disk_interface: virtio_scsi
+    disk_storage_domain: olvm-data
+    # Bootable data disks are unusual; default false.
+    disk_bootable: false
+    # Activate (hot-plug) the disk so a running guest sees it immediately.
+    disk_activate: true
+
+  tasks:
+    - name: Validate the required inputs
+      ansible.builtin.assert:
+        that:
+          - vm_name is defined
+          - vm_name | length > 0
+          - disk_name is defined
+          - disk_name | length > 0
+          - olvm_admin_password is defined
+          - olvm_admin_password | length > 0
+        fail_msg: >-
+          attach-disk.yml needs vm_name and disk_name (pass with -e or a vars
+          file) and the vaulted olvm_admin_password (auto-loaded from
+          group_vars/engine). One of these is missing.
+        success_msg: "Attach-disk inputs look valid."
+        quiet: true
+
+    - name: Attach the disk via the Engine API
+      block:
+        - name: Obtain an OLVM Engine API token
+          ovirt.ovirt.ovirt_auth:
+            url: "{{ olvm_api_url }}"
+            username: "{{ olvm_api_username }}"
+            password: "{{ olvm_admin_password }}"
+            insecure: "{{ olvm_api_insecure | bool }}"
+            ca_file: "{{ olvm_api_ca_file if (olvm_api_ca_file | length > 0) else omit }}"
+          register: olvm_auth_login
+          no_log: true
+
+        - name: Store the API session as an explicit variable
+          ansible.builtin.set_fact:
+            olvm_api_auth: "{{ olvm_auth_login.ansible_facts.ovirt_auth }}"
+          no_log: true
+
+        - name: "Look up the VM {{ vm_name }}"
+          ovirt.ovirt.ovirt_vm_info:
+            auth: "{{ olvm_api_auth }}"
+            pattern: "name={{ vm_name }}"
+          register: olvm_disk_vm_lookup
+
+        - name: Confirm the VM exists before attaching a disk
+          ansible.builtin.assert:
+            that:
+              - olvm_disk_vm_lookup.ovirt_vms | default([]) | length > 0
+            fail_msg: "VM {{ vm_name }} was not found; create it first with create-vm.yml."
+            success_msg: "VM {{ vm_name }} found (status {{ olvm_disk_vm_lookup.ovirt_vms[0].status | default('?') }})."
+            quiet: true
+
+        - name: "Create and attach disk {{ disk_name }} ({{ disk_size }}) to {{ vm_name }}"
+          ovirt.ovirt.ovirt_disk:
+            auth: "{{ olvm_api_auth }}"
+            name: "{{ disk_name }}"
+            vm_name: "{{ vm_name }}"
+            size: "{{ disk_size }}"
+            format: "{{ disk_format }}"
+            interface: "{{ disk_interface }}"
+            storage_domain: "{{ disk_storage_domain }}"
+            bootable: "{{ disk_bootable | bool }}"
+            activate: "{{ disk_activate | bool }}"
+            state: present
+          register: olvm_disk_result
+
+        - name: Show the disk attach summary
+          ansible.builtin.debug:
+            msg:
+              - "==================== ATTACH DISK SUMMARY ==================="
+              - "VM               : {{ vm_name }}"
+              - "Disk             : {{ disk_name }} {{ disk_size }} ({{ disk_format }}, {{ disk_interface }})"
+              - "Storage domain   : {{ disk_storage_domain }}"
+              - "Activated        : {{ disk_activate | bool }} (hot-plug when the VM is running)"
+              - "Changed          : {{ olvm_disk_result is changed }}"
+              - "==========================================================="
+              - "In the guest, partition/format the new block device (for example"
+              - "with lsblk then mkfs) and mount it."
+              - "==========================================================="
+
+      always:
+        - name: Revoke the Engine API token
+          ovirt.ovirt.ovirt_auth:
+            state: absent
+            ovirt_auth: "{{ olvm_api_auth | default(omit) }}"
+          when: olvm_api_auth is defined and (olvm_api_auth.token | default('')) | length > 0
+          no_log: true

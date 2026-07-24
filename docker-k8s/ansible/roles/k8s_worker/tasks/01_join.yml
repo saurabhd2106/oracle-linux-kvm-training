@@ -1,0 +1,35 @@
+---
+# 01 - Mint a short-lived join command on the control plane and run it here.
+# Idempotent: if kubelet.conf already exists the node has joined and join is
+# skipped. The token is generated fresh each run (kubeadm tokens expire in 24h),
+# so re-running works even long after the initial deploy.
+
+- name: Identify the control-plane host
+  ansible.builtin.set_fact:
+    control_plane_host: "{{ groups['k8s_control_plane'][0] }}"
+
+- name: Check whether this node has already joined
+  ansible.builtin.stat:
+    path: "{{ kubelet_conf }}"
+  register: kubelet_conf_stat
+
+- name: Generate a join command on the control plane
+  ansible.builtin.command: kubeadm token create --print-join-command
+  environment:
+    KUBECONFIG: "{{ control_plane_admin_conf }}"
+  register: join_command
+  changed_when: false
+  delegate_to: "{{ control_plane_host }}"
+  when: not kubelet_conf_stat.stat.exists
+
+- name: Join the worker node to the cluster
+  ansible.builtin.command: "{{ join_command.stdout }} --cri-socket unix:///run/containerd/containerd.sock"
+  args:
+    creates: "{{ kubelet_conf }}"
+  when: not kubelet_conf_stat.stat.exists
+  register: worker_join
+
+- name: Show a short join summary
+  ansible.builtin.debug:
+    msg: "Worker {{ inventory_hostname }} ({{ node_ip }}) joined the cluster."
+  when: worker_join is changed

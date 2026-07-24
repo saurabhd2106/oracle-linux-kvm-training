@@ -1,0 +1,26 @@
+# Copy this file to inventory/hosts.yml and set each ansible_host to the public IP
+# printed by Terraform, and each node_ip to the matching private IP. From
+# ../terraform run:
+#
+#   terraform output instance_public_ips     # ansible_host (SSH over the internet)
+#   terraform output instance_private_ips    # node_ip (in-cluster address on the VCN)
+#
+# The two groups map to the two VMs provisioned by the Terraform stack:
+#   k8s_control_plane -> control_plane VM -> roles k8s_common + k8s_control_plane
+#   k8s_workers       -> worker_node VM   -> roles k8s_common + k8s_worker
+#
+# node_ip is the private IP each node advertises to the cluster (API server
+# advertise address and kubelet node IP). Using the VCN private IP keeps all
+# control-plane/kubelet/etcd traffic on the internal network.
+---
+k8s_control_plane:
+  hosts:
+    k8s-cp-01:
+      ansible_host: 203.0.113.10
+      node_ip: 10.0.1.10
+
+k8s_workers:
+  hosts:
+    k8s-worker-01:
+      ansible_host: 203.0.113.20
+      node_ip: 10.0.1.20

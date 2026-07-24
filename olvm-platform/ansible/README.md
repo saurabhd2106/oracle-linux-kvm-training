@@ -4,7 +4,7 @@ One Ansible project that configures every machine provisioned by `../terraform`:
 
 | Group | Role | What it does |
 |-------|------|--------------|
-| `nfs_server` | `nfs_server` | Format/mount the data volume, install NFS, export `/exports/olvm`, open NFS ports |
+| `nfs_server` | `nfs_server` | Format/mount the data volume, install NFS, export `/exports/olvm` (+ `/exports/olvm-iso` for the ISO domain), open NFS ports |
 | `engine` | `olvm_engine` | Install and configure the OLVM 4.5 Engine via unattended `engine-setup` |
 | `kvm_hosts` | `olvm_host_prep` | Prep Oracle Linux 9.6+ hosts so "Add Host" in OLVM succeeds |
 | `engine` | `olvm_config` | Create the Data Center, Cluster, add the hosts and the NFS storage domain via the Engine API (runs locally) |
@@ -127,7 +127,12 @@ The final play runs the `olvm_config` role locally (`connection: local`,
    (private IP) and authenticated with the Engine SSH key already authorized by
    `olvm_host_prep` (`public_key: true`). It waits for each host to reach `Up`.
 4. The **NFS storage domain** (`olvm_storage_domain_name`, default `olvm-data`)
-   at `<nfs_server_address>:<nfs_export_path>`, attached to the Data Center.
+   at `<nfs_server_address>:<nfs_export_path>`, attached to the Data Center, plus
+   (Phase 2) a dedicated **ISO domain** (`olvm_iso_domain_name`, default
+   `olvm-iso`) at `<nfs_server_address>:<nfs_iso_export_path>` so install media
+   is kept out of the data domain. Disable it with
+   `olvm_configure_iso_domain: false`; run just this step with `--tags iso_domain`
+   (or `step10`). The `nfs_server` role exports both paths.
 5. The **logical networks** (`olvm_networks`): a dedicated VM network `olvm-vm`
    and a dedicated live-migration network `olvm-migration` (granted the cluster
    migration role so migration traffic does not saturate `ovirtmgmt`). The

@@ -28,11 +28,11 @@ kvm_hosts:
       target_hostname: olvm-kvm-01.lab.local
       # Private IP the Engine uses to reach this host (terraform output
       # kvm_host_private_ips). Required by the olvm_config play to "Add Host".
-      host_address: 10.0.1.11
+      host_address: 10.0.1.158
     olvm-kvm-02:
       ansible_host: 203.0.113.22
       target_hostname: olvm-kvm-02.lab.local
-      host_address: 10.0.1.12
+      host_address: 10.0.1.131
 
 nfs_server:
   hosts:
@@ -40,4 +40,4 @@ nfs_server:
       ansible_host: 203.0.113.30
       # Private IP of this NFS server (terraform output -raw nfs_private_ip).
       # KVM hosts and the Engine reach the export over this address.
-      nfs_server_address: 10.0.1.30
+      nfs_server_address: 10.0.1.253

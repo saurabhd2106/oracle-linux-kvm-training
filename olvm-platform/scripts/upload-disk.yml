@@ -35,9 +35,10 @@
     #                         the name upload_disk.py uploads.
 
     # --- Optional overrides (sensible lab defaults) -------------------------
-    # Storage domain the disk is uploaded to. Defaults to the platform's data
-    # domain (see roles/olvm_config/defaults/main.yml).
-    upload_disk_sd_name: "{{ olvm_storage_domain_name | default('olvm-data') }}"
+    # Storage domain the disk is uploaded to. Defaults to the Phase 2 ISO domain
+    # (olvm-iso) since this helper is used mostly for install media. Override
+    # with -e upload_disk_sd_name=olvm-data to push a data disk image instead.
+    upload_disk_sd_name: "{{ olvm_iso_domain_name | default('olvm-iso') }}"
 
     # Disk format passed to upload_disk.py. Use raw for ISO images (the script
     # still auto-detects the content type, iso vs data, from the file itself).

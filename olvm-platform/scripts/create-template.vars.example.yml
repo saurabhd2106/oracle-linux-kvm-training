@@ -1,0 +1,26 @@
+---
+# Example variables file for create-template.yml. Copy or edit, then pass it with:
+#
+#   cd olvm-platform/ansible
+#   ansible-playbook ../scripts/create-template.yml -e @../scripts/create-template.vars.example.yml
+#
+# template_name and template_vm are required; everything else has a lab default.
+
+# --- Required ----------------------------------------------------------------
+# Name of the template to create (unique in the cluster).
+template_name: ol9-base
+
+# Source VM to seal into the template. Stop it first (see below) so the template
+# is clean and minimally sized.
+template_vm: lab-vm-01
+
+# --- Optional overrides (defaults shown) -------------------------------------
+# Target cluster (created by olvm_config).
+# template_cluster: olvm-lab-cluster
+
+# Free-text description stored on the template.
+# template_description: "Golden image sealed by create-template.yml"
+
+# Seal from a running VM (uses a memory snapshot). Default false requires the VM
+# to be Down for a clean template.
+# template_from_running: false

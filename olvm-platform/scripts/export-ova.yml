@@ -1,0 +1,127 @@
+---
+# Export an OLVM virtual machine to an OVA file through the Engine REST API
+# (ovirt.ovirt.ovirt_vm with export_ova) - a portable backup of the VM without a
+# dedicated export domain or a full backup product. The OVA is written to a
+# directory ON A KVM HOST (the host performs the export), so restore later with
+# an OVA import (Admin Portal: Compute > Virtual Machines > Import > Source: VMware/OVA).
+#
+# Runs on the controller (connection: local) and talks to the Engine API, same
+# pattern as create-vm.yml / the olvm_config role.
+#
+# Run from the ansible project:
+#
+#   cd olvm-platform/ansible
+#   ansible-playbook ../scripts/export-ova.yml -e vm_name=lab-vm-01
+#   # or with a vars file:
+#   ansible-playbook ../scripts/export-ova.yml -e @../scripts/export-ova.vars.example.yml
+
+- name: Export an OLVM VM to an OVA file via the Engine API
+  hosts: engine
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+    # --- API connection (mirrors roles/olvm_config/defaults/main.yml) --------
+    olvm_api_url: "https://{{ ansible_host }}/ovirt-engine/api"
+    olvm_api_username: admin@ovirt@internalsso
+    olvm_api_insecure: true
+    olvm_api_ca_file: ""
+
+    # --- Export options (override with -e or a vars file) --------------------
+    # vm_name is REQUIRED.
+    # KVM host that runs the export (must be Up). Defaults to the first host in
+    # the kvm_hosts group.
+    ova_host: "{{ groups['kvm_hosts'][0] | default('') }}"
+    # Directory ON ova_host the OVA is written to (created if missing, must have
+    # room for the VM's disks).
+    ova_directory: /var/tmp/olvm-ova
+    ova_filename: "{{ vm_name }}.ova"
+    # Require the VM to be Down for a clean export. Set true to export a running
+    # VM (a snapshot is used; larger and slower).
+    ova_from_running: false
+
+  tasks:
+    - name: Validate the required inputs
+      ansible.builtin.assert:
+        that:
+          - vm_name is defined
+          - vm_name | length > 0
+          - ova_host is defined
+          - ova_host | length > 0
+          - olvm_admin_password is defined
+          - olvm_admin_password | length > 0
+        fail_msg: >-
+          export-ova.yml needs vm_name (pass with -e or a vars file), an ova_host
+          in the kvm_hosts group, and the vaulted olvm_admin_password
+          (auto-loaded from group_vars/engine). One of these is missing.
+        success_msg: "Export-OVA inputs look valid."
+        quiet: true
+
+    - name: Export the VM via the Engine API
+      block:
+        - name: Obtain an OLVM Engine API token
+          ovirt.ovirt.ovirt_auth:
+            url: "{{ olvm_api_url }}"
+            username: "{{ olvm_api_username }}"
+            password: "{{ olvm_admin_password }}"
+            insecure: "{{ olvm_api_insecure | bool }}"
+            ca_file: "{{ olvm_api_ca_file if (olvm_api_ca_file | length > 0) else omit }}"
+          register: olvm_auth_login
+          no_log: true
+
+        - name: Store the API session as an explicit variable
+          ansible.builtin.set_fact:
+            olvm_api_auth: "{{ olvm_auth_login.ansible_facts.ovirt_auth }}"
+          no_log: true
+
+        - name: "Look up the VM {{ vm_name }}"
+          ovirt.ovirt.ovirt_vm_info:
+            auth: "{{ olvm_api_auth }}"
+            pattern: "name={{ vm_name }}"
+          register: olvm_ova_vm_lookup
+
+        - name: Confirm the VM exists and (unless allowed) is stopped
+          ansible.builtin.assert:
+            that:
+              - olvm_ova_vm_lookup.ovirt_vms | default([]) | length > 0
+              - (ova_from_running | bool) or (olvm_ova_vm_lookup.ovirt_vms[0].status == 'down')
+            fail_msg: >-
+              {{ vm_name }} must exist and be Down for a clean OVA export (current
+              status: {{ olvm_ova_vm_lookup.ovirt_vms[0].status | default('not found') }}).
+              Stop the VM first, or pass -e ova_from_running=true.
+            success_msg: "{{ vm_name }} is ready to export."
+            quiet: true
+
+        - name: "Export {{ vm_name }} to {{ ova_directory }}/{{ ova_filename }} on {{ ova_host }}"
+          ovirt.ovirt.ovirt_vm:
+            auth: "{{ olvm_api_auth }}"
+            name: "{{ vm_name }}"
+            cluster: "{{ olvm_ova_vm_lookup.ovirt_vms[0].cluster.name | default(omit) }}"
+            export_ova:
+              host: "{{ ova_host }}"
+              directory: "{{ ova_directory }}"
+              filename: "{{ ova_filename }}"
+          register: olvm_ova_result
+
+        - name: Show the export summary
+          ansible.builtin.debug:
+            msg:
+              - "==================== EXPORT OVA SUMMARY ===================="
+              - "VM               : {{ vm_name }}"
+              - "Exported on host : {{ ova_host }}"
+              - "OVA file         : {{ ova_directory }}/{{ ova_filename }}"
+              - "Changed          : {{ olvm_ova_result is changed }}"
+              - "==========================================================="
+              - "Copy the OVA off the host to keep the backup, and restore later"
+              - "via Compute > Virtual Machines > Import (OVA source)."
+              - "==========================================================="
+
+      always:
+        - name: Revoke the Engine API token
+          ovirt.ovirt.ovirt_auth:
+            state: absent
+            ovirt_auth: "{{ olvm_api_auth | default(omit) }}"
+          when: olvm_api_auth is defined and (olvm_api_auth.token | default('')) | length > 0
+          no_log: true

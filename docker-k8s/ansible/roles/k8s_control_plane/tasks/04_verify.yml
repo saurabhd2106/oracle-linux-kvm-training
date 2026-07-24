@@ -1,0 +1,33 @@
+---
+# 04 - Confirm the control-plane node reaches Ready (CNI healthy) and surface the
+# node/pod status in the run output.
+
+- name: Wait for the control-plane node to become Ready
+  ansible.builtin.command: >-
+    kubectl wait --for=condition=Ready node/{{ ansible_facts['hostname'] }}
+    --timeout={{ node_ready_timeout }}
+  environment:
+    KUBECONFIG: "{{ kubeadm_admin_conf }}"
+  changed_when: false
+
+- name: Get node status
+  ansible.builtin.command: kubectl get nodes -o wide
+  environment:
+    KUBECONFIG: "{{ kubeadm_admin_conf }}"
+  register: node_status
+  changed_when: false
+
+- name: Show node status
+  ansible.builtin.debug:
+    var: node_status.stdout_lines
+
+- name: Get system pod status
+  ansible.builtin.command: kubectl get pods -A
+  environment:
+    KUBECONFIG: "{{ kubeadm_admin_conf }}"
+  register: pod_status
+  changed_when: false
+
+- name: Show pod status
+  ansible.builtin.debug:
+    var: pod_status.stdout_lines

@@ -1,0 +1,15 @@
+---
+# k8s_control_plane - initialize the cluster with kubeadm, set up kubeconfig for
+# the opc user, install the Calico CNI, and verify the control plane is Ready.
+
+- name: Initialize the control plane with kubeadm
+  ansible.builtin.import_tasks: 01_kubeadm_init.yml
+
+- name: Configure kubeconfig for the admin user
+  ansible.builtin.import_tasks: 02_kubeconfig.yml
+
+- name: Install the Calico CNI
+  ansible.builtin.import_tasks: 03_calico_cni.yml
+
+- name: Verify the control plane
+  ansible.builtin.import_tasks: 04_verify.yml

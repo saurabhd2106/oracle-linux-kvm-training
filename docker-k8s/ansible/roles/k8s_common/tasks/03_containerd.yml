@@ -1,0 +1,63 @@
+---
+# 03 - Install and configure containerd, the CRI runtime kubeadm talks to. The
+# two things kubeadm cares about: SystemdCgroup must be true (to match the
+# kubelet's systemd cgroup driver) and the sandbox/pause image must match the
+# version this Kubernetes minor expects.
+
+- name: Add the Docker CE yum repository (provides containerd.io)
+  ansible.builtin.get_url:
+    url: "{{ docker_ce_repo_url }}"
+    dest: /etc/yum.repos.d/docker-ce.repo
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install containerd.io
+  ansible.builtin.dnf:
+    name: containerd.io
+    state: present
+
+- name: Ensure /etc/containerd exists
+  ansible.builtin.file:
+    path: /etc/containerd
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Generate the default containerd configuration
+  ansible.builtin.command: containerd config default
+  register: containerd_default_config
+  changed_when: false
+
+- name: Write containerd config with systemd cgroups and the pinned pause image
+  ansible.builtin.copy:
+    dest: "{{ containerd_config_path }}"
+    content: "{{ containerd_default_config.stdout }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart containerd
+
+- name: Enable SystemdCgroup for the runc runtime
+  ansible.builtin.replace:
+    path: "{{ containerd_config_path }}"
+    regexp: 'SystemdCgroup = false'
+    replace: 'SystemdCgroup = true'
+  notify: Restart containerd
+
+- name: Pin the sandbox (pause) image to match the Kubernetes version
+  ansible.builtin.replace:
+    path: "{{ containerd_config_path }}"
+    regexp: 'sandbox_image = ".*"'
+    replace: 'sandbox_image = "{{ pause_image }}"'
+  notify: Restart containerd
+
+- name: Enable and start containerd
+  ansible.builtin.systemd:
+    name: containerd
+    enabled: true
+    state: started
+
+- name: Apply any pending containerd restart now
+  ansible.builtin.meta: flush_handlers

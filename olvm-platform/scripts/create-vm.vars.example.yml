@@ -39,8 +39,32 @@ vm_name: lab-vm-01
 # its file name here; leave empty to create the VM with a blank disk only.
 # vm_iso_name: OracleLinux-R9-U7-x86_64-dvd.iso
 
-# Template to clone the VM from. Empty = the built-in Blank template.
+# Template to clone the VM from. Empty = the built-in Blank template. Set a
+# template name (sealed with scripts/create-template.yml) to clone it: the
+# template's system disk is copied, so vm_disk_* and vm_iso_name are ignored.
 # vm_template: ""
+
+# --- Clone from a template with cloud-init (Phase 2) -------------------------
+# Uncomment this block to clone a golden template and customize it on first boot
+# with cloud-init (needs a cloud-init-enabled guest, i.e. a template - not a
+# blank ISO install). Only the fields you set are sent to the Engine.
+#
+# vm_name: lab-clone-01
+# vm_template: ol9-base
+# vm_state: running
+# vm_cloud_init: true
+# vm_cloud_init_host_name: lab-clone-01
+# vm_cloud_init_user_name: opc
+# vm_cloud_init_root_password: "ChangeMe123!"
+# vm_cloud_init_ssh_keys: "ssh-ed25519 AAAA... you@host"
+# vm_cloud_init_custom_script: |
+#   packages:
+#     - vim
+# NIC IP: dhcp (default) or static (then set the address fields).
+# vm_cloud_init_nic_boot_protocol: dhcp
+# vm_cloud_init_nic_ip_address: ""
+# vm_cloud_init_nic_netmask: ""
+# vm_cloud_init_nic_gateway: ""
 
 # present = define the VM (stopped); running = also power it on.
 # vm_state: present

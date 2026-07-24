@@ -1,0 +1,9 @@
+---
+# k8s_worker - join the worker node to the cluster using a fresh token minted on
+# the control plane, then verify it reaches Ready.
+
+- name: Join the worker node to the cluster
+  ansible.builtin.import_tasks: 01_join.yml
+
+- name: Verify the worker node
+  ansible.builtin.import_tasks: 02_verify.yml

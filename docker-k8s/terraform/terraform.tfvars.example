@@ -1,0 +1,55 @@
+# Copy this file to terraform.tfvars and replace placeholder values before running Terraform.
+
+tenancy_ocid     = "ocid1.tenancy.oc1..exampleuniqueid"
+user_ocid        = "ocid1.user.oc1..exampleuniqueid"
+fingerprint      = "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"
+private_key_path = "~/.oci/oci_api_key.pem"
+region           = "ap-sydney-1"
+compartment_ocid = "ocid1.compartment.oc1..exampleuniqueid"
+
+# Set a unique prefix per person (2-6 lowercase alphanumeric characters) so
+# multiple people can run this same code in the same tenancy without name
+# clashes. Example: "sau" yields sau-linux-day1-vm, sau-linux-day1-vcn, etc.
+name_prefix  = "sau"
+project_name = "linux-day1"
+
+# VMs to create, keyed by short name. Networking and the SSH keypair are shared
+# across all VMs. An empty object {} uses the global defaults below; set any
+# field to override it for that VM (display_name, hostname_label, instance_shape,
+# instance_ocpus, instance_memory_in_gbs, boot_volume_size_in_gbs,
+# data_volume_size_in_gbs). Add or remove entries to change the number of VMs.
+vms = {
+  vm1 = {}
+}
+
+# Attach an extra secondary VNIC to the listed VM keys for the KVM bridged-guest
+# labs (Lab 4.1 Option 1/2). The VNIC gives a KVM guest an OCI-recognized MAC/IP.
+# Leave commented (empty list) unless you are running those labs.
+# secondary_vnic_vms = ["vm1"]
+
+# Global defaults applied to any VM field left unset above.
+# VM.Standard.E5.Flex with 4 OCPUs and 16 GB memory.
+instance_shape         = "VM.Standard.E5.Flex"
+instance_ocpus         = 4
+instance_memory_in_gbs = 16
+
+boot_volume_size_in_gbs = 50
+oracle_linux_version    = "9"
+
+vcn_cidr_block           = "10.0.0.0/16"
+public_subnet_cidr_block = "10.0.1.0/24"
+
+# For production, replace this with your workstation or corporate public IP range.
+ssh_allowed_cidr = "0.0.0.0/0"
+
+# TCP ports opened inbound from ssh_allowed_cidr. Add any port you need here.
+allowed_ingress_ports = [22, 80, 8080]
+
+# Optional: Terraform writes the generated VM SSH private key with 0600 permissions.
+# Leave commented to use the unique default ./generated/<name_prefix>-<project_name>.
+# ssh_private_key_path = "./generated/linux-day1"
+
+freeform_tags = {
+  managed-by = "terraform"
+  project    = "linux-day1"
+}

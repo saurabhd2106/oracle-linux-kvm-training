@@ -54,6 +54,13 @@
         - step05
         - storage
 
+    - name: "Step 10 - Attach the NFS ISO storage domain (opt-in)"
+      ansible.builtin.import_tasks: 10_iso_domain.yml
+      tags:
+        - step10
+        - iso_domain
+        - storage
+
     - name: "Step 07 - Ensure the logical networks exist"
       ansible.builtin.import_tasks: 07_networks.yml
       tags:

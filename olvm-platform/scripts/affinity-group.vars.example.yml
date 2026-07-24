@@ -1,0 +1,35 @@
+---
+# Example variables file for affinity-group.yml. Copy or edit, then pass it with:
+#
+#   cd olvm-platform/ansible
+#   ansible-playbook ../scripts/affinity-group.yml -e @../scripts/affinity-group.vars.example.yml
+#
+# affinity_group_name is required; everything else has a lab default.
+
+# --- Required ----------------------------------------------------------------
+# Name of the affinity group (unique in the cluster).
+affinity_group_name: lab-spread
+
+# --- Optional overrides (defaults shown) -------------------------------------
+# affinity_cluster: olvm-lab-cluster
+# affinity_description: "Managed by affinity-group.yml"
+# affinity_state: present          # present | absent
+
+# VM rule: negative (keep apart) | positive (keep together) | disabled.
+# affinity_vm_rule: negative
+# Hard rule (block placement if unsatisfiable) vs soft preference.
+# affinity_vm_enforcing: false
+
+# Host rule (relative to affinity_hosts): positive | negative | disabled.
+# affinity_host_rule: disabled
+# affinity_host_enforcing: false
+
+# VMs in the group. Override with your own lab VM names.
+affinity_vms:
+  - lab-vm-01
+  - lab-vm-02
+
+# Optional hosts to pin the group to.
+# affinity_hosts:
+#   - olvm-kvm-01
+#   - olvm-kvm-02

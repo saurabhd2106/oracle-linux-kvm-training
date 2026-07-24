@@ -58,6 +58,16 @@ olvm_storage_domain_nfs_address: >-
      if (groups['nfs_server'] | default([]) | length > 0)
      else '' }}
 
+# --- ISO storage domain (Phase 2) -------------------------------------------
+# A dedicated ISO domain keeps install media out of the data domain. It is a
+# second NFS export on the same nfs_server (nfs_iso_export_path). Set
+# olvm_configure_iso_domain: false to skip attaching it.
+olvm_configure_iso_domain: true
+olvm_iso_domain_name: olvm-iso
+olvm_iso_domain_path: "{{ nfs_iso_export_path | default('/exports/olvm-iso') }}"
+# Same NFS server as the data domain; only the export path differs.
+olvm_iso_domain_nfs_address: "{{ olvm_storage_domain_nfs_address }}"
+
 # --- Networks (best-practice logical network segregation) -------------------
 # Logical networks created in the Data Center, with their roles assigned at the
 # cluster level. The built-in "ovirtmgmt" network (created by engine-setup) is

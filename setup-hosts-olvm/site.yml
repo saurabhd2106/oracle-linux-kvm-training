@@ -1,7 +1,0 @@
----
-- name: Prepare an Oracle Linux 9.6+ host to be added to an existing OLVM 4.5 Engine
-  hosts: kvm_hosts
-  become: true
-  gather_facts: true
-  roles:
-    - olvm_host_prep

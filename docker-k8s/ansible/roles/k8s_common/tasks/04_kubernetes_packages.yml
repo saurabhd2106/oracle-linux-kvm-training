@@ -1,0 +1,42 @@
+---
+# 04 - Add the community pkgs.k8s.io repo for the pinned minor version and
+# install kubelet/kubeadm/kubectl. The repo is excluded from normal dnf updates
+# (exclude=) so an unattended `dnf update` cannot silently bump the cluster; the
+# install here re-enables it with disable_excludes.
+
+- name: Add the Kubernetes {{ kubernetes_version }} yum repository
+  ansible.builtin.yum_repository:
+    name: kubernetes
+    description: "Kubernetes v{{ kubernetes_version }}"
+    baseurl: "{{ k8s_repo_baseurl }}"
+    gpgcheck: true
+    gpgkey: "{{ k8s_repo_gpgkey }}"
+    enabled: true
+    # Hold these back from routine `dnf update`; upgrades are done deliberately.
+    exclude:
+      - kubelet
+      - kubeadm
+      - kubectl
+      - cri-tools
+      - kubernetes-cni
+
+- name: Install kubelet, kubeadm and kubectl (latest patch in the minor)
+  ansible.builtin.dnf:
+    name: "{{ k8s_packages }}"
+    state: present
+    disable_excludes: kubernetes
+  when: kubernetes_package_version | length == 0
+
+- name: Install kubelet, kubeadm and kubectl (pinned patch)
+  ansible.builtin.dnf:
+    name: "{{ k8s_packages | map('regex_replace', '$', '-' ~ kubernetes_package_version) | list }}"
+    state: present
+    disable_excludes: kubernetes
+    allow_downgrade: true
+  when: kubernetes_package_version | length > 0
+
+- name: Enable the kubelet service (it stays crash-looping until kubeadm runs)
+  ansible.builtin.systemd:
+    name: kubelet
+    enabled: true
+    state: started

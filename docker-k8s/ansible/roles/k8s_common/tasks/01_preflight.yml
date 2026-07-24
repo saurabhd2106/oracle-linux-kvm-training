@@ -1,0 +1,52 @@
+---
+# 01 - Fail fast if the host cannot run a kubeadm node: wrong OS, wrong arch, or
+# insufficient CPU/memory. Catching this here is far cheaper than a cryptic
+# kubeadm preflight failure mid-run.
+
+- name: Assert the host runs Oracle Linux 9 or later
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'OracleLinux'
+      - ansible_facts['distribution_major_version'] is version(k8s_min_ol_version, '>=')
+    fail_msg: >-
+      This host must run Oracle Linux {{ k8s_min_ol_version }} or later.
+      Detected: {{ ansible_facts['distribution'] }}
+      {{ ansible_facts['distribution_version'] }}.
+    success_msg: >-
+      Host is Oracle Linux {{ ansible_facts['distribution_version'] }}.
+    quiet: true
+
+- name: Assert the CPU architecture is x86_64
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['architecture'] == 'x86_64'
+    fail_msg: >-
+      This playbook targets x86_64 nodes (the pinned pause image and package
+      set assume it). Detected architecture: {{ ansible_facts['architecture'] }}.
+    quiet: true
+
+- name: Assert the node meets minimum CPU and memory
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['processor_vcpus'] | int >= k8s_min_cpus | int
+      - ansible_facts['memtotal_mb'] | int >= k8s_min_mem_mb | int
+    fail_msg: >-
+      Kubernetes requires at least {{ k8s_min_cpus }} vCPU and
+      {{ k8s_min_mem_mb }} MB RAM. Detected
+      {{ ansible_facts['processor_vcpus'] }} vCPU and
+      {{ ansible_facts['memtotal_mb'] }} MB RAM.
+    success_msg: >-
+      Node has {{ ansible_facts['processor_vcpus'] }} vCPU and
+      {{ ansible_facts['memtotal_mb'] }} MB RAM.
+    quiet: true
+
+- name: Assert node_ip is defined for the in-cluster address
+  ansible.builtin.assert:
+    that:
+      - node_ip is defined
+      - node_ip | length > 0
+    fail_msg: >-
+      Each host must set node_ip (its VCN private IP) in the inventory. This is
+      used as the kubelet node IP and the API server advertise address. See
+      inventory/hosts.yml.example.
+    quiet: true

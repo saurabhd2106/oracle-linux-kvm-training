@@ -1,0 +1,19 @@
+---
+# 10 - Attach the second NFS export as an ISO storage domain (Phase 2) so
+# install media lives outside the data domain. Like the data domain (step 05)
+# it needs an Up host in the DC to initialize the domain, so the first KVM host
+# is used. Opt-out with olvm_configure_iso_domain: false.
+
+- name: "Ensure ISO storage domain {{ olvm_iso_domain_name }} is attached to {{ olvm_datacenter_name }}"
+  ovirt.ovirt.ovirt_storage_domain:
+    auth: "{{ olvm_api_auth }}"
+    name: "{{ olvm_iso_domain_name }}"
+    domain_function: iso
+    host: "{{ groups['kvm_hosts'][0] }}"
+    data_center: "{{ olvm_datacenter_name }}"
+    nfs:
+      address: "{{ olvm_iso_domain_nfs_address }}"
+      path: "{{ olvm_iso_domain_path }}"
+    state: present
+  when: olvm_configure_iso_domain | bool
+  register: olvm_iso_domain_result
